@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp, Role } from '@/contexts/AppContext';
 import { User, Shield, Mail, ArrowRight, Sparkles } from 'lucide-react';
@@ -152,6 +152,16 @@ const Auth = () => {
               </motion.button>
             </motion.form>
           </AnimatePresence>
+
+          {/* Footer */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              Don't have an account?{' '}
+              <Link to="/signup" className="text-primary hover:underline font-medium">
+                Sign Up
+              </Link>
+            </p>
+          </div>
         </div>
       </motion.div>
     </div>

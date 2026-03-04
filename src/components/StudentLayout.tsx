@@ -4,6 +4,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { LayoutDashboard, Briefcase, Activity, UserCircle, LogOut, Sparkles, Menu, X } from 'lucide-react';
 import { useState } from 'react';
+import { ThemeToggle } from './ThemeToggle';
 
 const links = [
   { to: '/student', icon: LayoutDashboard, label: 'Dashboard', end: true },
@@ -61,19 +62,24 @@ const StudentLayout = () => {
       </nav>
 
       <div className="p-4 border-t border-border/20">
-        <div className="flex items-center gap-3 px-4 py-2 mb-2">
-          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-bold">
-            {user?.name?.[0] || 'S'}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{user?.name}</p>
-            <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3 px-4 py-2">
+            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-bold">
+              {user?.name?.[0] || 'S'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{user?.name}</p>
+              <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+            </div>
           </div>
         </div>
-        <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2 w-full rounded-xl text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
-          <LogOut className="w-4 h-4" />
-          Sign Out
-        </button>
+        <div className="flex items-center justify-between">
+          <ThemeToggle />
+          <button onClick={handleLogout} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+            <LogOut className="w-4 h-4" />
+            Sign Out
+          </button>
+        </div>
       </div>
     </>
   );
@@ -88,6 +94,9 @@ const StudentLayout = () => {
           <div className="flex items-center gap-2 ml-3">
             <Sparkles className="w-5 h-5 text-primary" />
             <span className="font-bold text-gradient-primary">Transparently</span>
+          </div>
+          <div className="ml-auto">
+            <ThemeToggle />
           </div>
         </div>
       )}

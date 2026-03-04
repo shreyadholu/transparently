@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @layer base {
   :root {
@@ -56,6 +56,56 @@
     --sidebar-border: 224 28% 16%;
     --sidebar-ring: 263 70% 58%;
   }
+
+  .light {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 263 70% 58%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 187 92% 41%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 187 92% 41%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 160 84% 39%;
+    --success-foreground: 210 40% 98%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 263 70% 58%;
+
+    --glow-primary: 0 8px 32px hsl(263 70% 58% / 0.15);
+    --glow-accent: 0 8px 32px hsl(187 92% 41% / 0.15);
+    --glow-destructive: 0 8px 32px hsl(0 84% 60% / 0.15);
+    --glow-success: 0 8px 32px hsl(160 84% 39% / 0.15);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 263 70% 58%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 263 70% 58%;
+  }
 }
 
 @layer base {
@@ -66,7 +116,15 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', sans-serif;
+  }
+
+  .dark body {
     background: linear-gradient(145deg, hsl(228 33% 5%), hsl(222 33% 9%), hsl(222 47% 11%));
+    background-attachment: fixed;
+  }
+
+  .light body {
+    background: linear-gradient(145deg, hsl(210 40% 96%), hsl(210 40% 98%), hsl(210 40% 100%));
     background-attachment: fixed;
   }
 
@@ -83,11 +141,23 @@
     box-shadow: var(--glow-primary);
   }
 
+  .light .glass-card {
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  }
+
   .glass-card-accent {
     @apply backdrop-blur-lg rounded-2xl;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid hsl(187 92% 41% / 0.2);
     box-shadow: var(--glow-accent);
+  }
+
+  .light .glass-card-accent {
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid hsl(187 92% 41% / 0.2);
+    box-shadow: 0 4px 24px rgba(187, 92, 41, 0.1);
   }
 
   .glass-card-subtle {
@@ -96,10 +166,21 @@
     border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
+  .light .glass-card-subtle {
+    background: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
   .elevated-card {
     @apply backdrop-blur-lg rounded-2xl transition-all duration-300;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .light .elevated-card {
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
   }
 
   .elevated-card:hover {
@@ -108,9 +189,24 @@
     transform: translateY(-2px) scale(1.01);
   }
 
+  .light .elevated-card:hover {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1), 0 0 24px hsl(263 70% 58% / 0.1);
+    border-color: hsl(263 70% 58% / 0.3);
+  }
+
   .glass-input {
     @apply bg-muted/50 backdrop-blur-sm rounded-xl text-foreground placeholder:text-muted-foreground;
     border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .light .glass-input {
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+  }
+
+  .light .glass-input:focus {
+    background: rgba(0, 0, 0, 0.06);
+    border-color: hsl(263 70% 58% / 0.4);
   }
 
   .glow-border-primary {

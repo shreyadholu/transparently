@@ -3,6 +3,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { Users, Briefcase, BarChart3, Building2, Sparkles, ArrowRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { RecruiterAnalytics } from '@/components/AnalyticsCharts';
 
 const container = {
   hidden: { opacity: 0 },
@@ -160,6 +161,14 @@ const AdminOverview = () => {
             })}
           </div>
         )}
+      </motion.div>
+
+      {/* Analytics Charts */}
+      <motion.div variants={item}>
+        <h2 className="section-header text-sm mb-5 flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-primary" /> Dashboard Analytics
+        </h2>
+        <RecruiterAnalytics />
       </motion.div>
     </motion.div>
   );

@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
 import { AlertTriangle, TrendingUp, FileText, BookOpen, CheckCircle2, XCircle, Clock, Activity } from 'lucide-react';
+import { ApplicationTimeline } from '@/components/ApplicationTimeline';
 
 const container = {
   hidden: { opacity: 0 },
@@ -88,6 +89,11 @@ const Feedback = () => {
                     {statusLabel(app.status)}
                   </span>
                 </div>
+              </div>
+
+              {/* Application Timeline */}
+              <div className="p-6 border-b border-border/30">
+                <ApplicationTimeline currentStatus={app.status} appliedAt={app.appliedAt} />
               </div>
 
               <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
