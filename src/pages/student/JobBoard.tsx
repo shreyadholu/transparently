@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
+import { supabase } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { Briefcase, MapPin, Clock, CheckCircle2, Sparkles, User, TrendingUp, ArrowRight, Search, Filter, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
@@ -23,6 +24,20 @@ const JobBoard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Fetch jobs from Supabase on mount
+  useEffect(() => {
+    const fetchJobs = async () => {
+      const { data, error } = await supabase.from("jobs").select("*");
+      if (error) {
+        console.log("Error fetching jobs:", error);
+        return;
+      }
+      // Jobs are handled in AppContext local state
+      console.log("Fetched jobs from Supabase:", data);
+    };
+    fetchJobs();
+  }, []);
 
   // Get all unique skills from jobs
   const allSkills = useMemo(() => {
@@ -66,8 +81,23 @@ const JobBoard = () => {
     setShowSuccess(false);
   };
 
-  const handleConfirmApply = () => {
+  const handleConfirmApply = async () => {
     if (!selectedJob) return;
+
+    // Insert application into Supabase
+    const { error } = await supabase.from("applications").insert([
+      {
+        job_id: selectedJob.id,
+        student_id: user?.id,
+        status: "pending"
+      }
+    ]);
+
+    if (error) {
+      console.log("Error applying to job:", error);
+    }
+
+    // Also update local state
     applyToJob(selectedJob.id);
     setShowSuccess(true);
     setTimeout(() => {

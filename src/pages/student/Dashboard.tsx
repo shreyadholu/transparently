@@ -1,6 +1,8 @@
 import { motion } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
+import { supabase } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import ResumeScoreRing from '@/components/ResumeScoreRing';
 import { FileText, Target, Briefcase, Upload, Sparkles, Shield, Type, Search } from 'lucide-react';
 
@@ -33,6 +35,24 @@ const FloatingShape = ({ className, delay = 0 }: { className: string; delay?: nu
 const StudentDashboard = () => {
   const { user, applications, jobs, uploadResume } = useApp();
   const navigate = useNavigate();
+
+  // Fetch applications for the logged-in student from Supabase
+  useEffect(() => {
+    const fetchApplications = async () => {
+      if (!user?.id) return;
+      const { data, error } = await supabase
+        .from("applications")
+        .select("*")
+        .eq("student_id", user.id);
+      
+      if (error) {
+        console.log("Error fetching applications:", error);
+        return;
+      }
+      console.log("Fetched student applications from Supabase:", data);
+    };
+    fetchApplications();
+  }, [user?.id]);
 
   const appliedCount = applications.filter(a => a.studentEmail === user?.email).length;
   const approvedCount = applications.filter(a => a.studentEmail === user?.email && a.status === 'approved').length;

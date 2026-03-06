@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp, Role } from '@/contexts/AppContext';
 import { User, Shield, Mail, ArrowRight, Sparkles } from 'lucide-react';
+import { supabase } from "../lib/supabase"
 
 const Auth = () => {
   const [role, setRole] = useState<Role>('student');
@@ -11,10 +12,24 @@ const Auth = () => {
   const { login } = useApp();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email) return;
-    login(name, email, role);
+
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .eq("full_name", name)
+      .eq("role", role)
+      .single();
+
+    if (error || !data) {
+      alert("User not found. Please sign up first.");
+      return;
+    }
+
+    login(data.full_name, data.email, data.role, data.id);
     navigate(role === 'student' ? '/student' : '/admin');
   };
 

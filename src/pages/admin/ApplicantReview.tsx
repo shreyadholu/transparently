@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp, Application } from '@/contexts/AppContext';
+import { supabase } from '@/lib/supabase';
 import { User, CheckCircle2, XCircle, FileText, Search, Shield } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 
@@ -20,6 +21,22 @@ const ApplicantReview = () => {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Fetch applications from Supabase on mount
+  useEffect(() => {
+    const fetchApplications = async () => {
+      const { data, error } = await supabase
+        .from("applications")
+        .select(`id, status, job_id, student_id, users(full_name,email), jobs(title,company)`);
+      
+      if (error) {
+        console.log("Error fetching applications:", error);
+        return;
+      }
+      console.log("Fetched applications from Supabase:", data);
+    };
+    fetchApplications();
+  }, []);
+
   const filtered = applications.filter(app => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -36,14 +53,29 @@ const ApplicantReview = () => {
     setSheetOpen(true);
   };
 
-  const handleApprove = (id: string) => {
+  const handleApprove = async (id: string) => {
+    // Update status in Supabase
+    await supabase
+      .from("applications")
+      .update({ status: "approved" })
+      .eq("id", id);
+
+    // Update local state
     reviewApplication(id, 'approved');
     setSheetOpen(false);
     setSelected(null);
   };
 
-  const handleReject = (id: string) => {
+  const handleReject = async (id: string) => {
     if (rejectionReasons.length === 0) return;
+
+    // Update status in Supabase
+    await supabase
+      .from("applications")
+      .update({ status: "rejected" })
+      .eq("id", id);
+
+    // Update local state
     reviewApplication(id, 'rejected', rejectionReasons);
     setSheetOpen(false);
     setSelected(null);

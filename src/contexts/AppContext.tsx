@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 export type Role = 'student' | 'recruiter';
 
 export interface User {
+  id?: string;
   name: string;
   email: string;
   role: Role;
@@ -45,7 +46,7 @@ interface AppState {
   user: User | null;
   jobs: Job[];
   applications: Application[];
-  login: (name: string, email: string, role: Role) => void;
+  login: (name: string, email: string, role: Role, id?: string) => void;
   logout: () => void;
   addJob: (job: Omit<Job, 'id' | 'postedAt'>) => void;
   deleteJob: (jobId: string) => void;
@@ -104,8 +105,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => { localStorage.setItem('transparently_jobs', JSON.stringify(jobs)); }, [jobs]);
   useEffect(() => { localStorage.setItem('transparently_applications', JSON.stringify(applications)); }, [applications]);
 
-  const login = (name: string, email: string, role: Role) => {
-    setUser({ name, email, role, skills: ['React', 'TypeScript', 'CSS'], resumeScore: 72, resumeUploaded: false });
+  const login = (name: string, email: string, role: Role, id?: string) => {
+    setUser({ id, name, email, role, skills: ['React', 'TypeScript', 'CSS'], resumeScore: 72, resumeUploaded: false });
   };
 
   const logout = () => setUser(null);

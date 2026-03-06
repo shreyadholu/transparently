@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
+import { supabase } from '@/lib/supabase';
 import { Plus, X, Briefcase, CheckCircle2, Trash2 } from 'lucide-react';
 
 const JobManagement = () => {
-  const { jobs, addJob, deleteJob } = useApp();
+  const { jobs, addJob, deleteJob, user } = useApp();
   const [title, setTitle] = useState('');
   const [company, setCompany] = useState('');
   const [criteria, setCriteria] = useState('');
@@ -18,9 +19,26 @@ const JobManagement = () => {
     setSkillInput('');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !company || skills.length === 0) return;
+
+    // Insert job into Supabase
+    const { error } = await supabase.from("jobs").insert([
+      {
+        title: title,
+        company: company,
+        description: criteria,
+        recruiter_id: user?.id
+      }
+    ]);
+
+    if (error) {
+      console.log("Error creating job:", error);
+      return;
+    }
+
+    // Also update local state
     addJob({ title, company, skills, criteria });
     setTitle('');
     setCompany('');

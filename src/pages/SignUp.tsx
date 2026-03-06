@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp, Role } from '@/contexts/AppContext';
 import { User, Shield, Mail, ArrowRight, Sparkles, Lock } from 'lucide-react';
+import { supabase } from "../lib/supabase"
 
 const SignUp = () => {
   const [role, setRole] = useState<Role>('student');
@@ -12,11 +13,25 @@ const SignUp = () => {
   const { login } = useApp();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email || !password) return;
-    login(name, email, role);
-    navigate(role === 'student' ? '/student' : '/admin');
+
+    const { error } = await supabase.from("users").insert([
+      {
+        full_name: name,
+        email: email,
+        password: password,
+        role: role
+      }
+    ]);
+
+    if (error) {
+      console.log(error);
+      return;
+    }
+
+    navigate("/login");
   };
 
   return (
@@ -111,7 +126,7 @@ const SignUp = () => {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: role === 'student' ? 20 : -20 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              onSubmit={handleSubmit}
+              onSubmit={handleSignUp}
               className="space-y-5"
             >
               <div>

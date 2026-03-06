@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
+import { supabase } from '@/lib/supabase';
 import { Upload, Plus, X, UserCircle, FileText, CheckCircle2 } from 'lucide-react';
 
 const Profile = () => {
@@ -19,7 +20,20 @@ const Profile = () => {
     updateSkills(user.skills.filter(s => s !== skill));
   };
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
+    // Upload resume to Supabase - insert into student_profiles
+    const { error } = await supabase.from("student_profiles").insert([
+      {
+        user_id: user?.id,
+        resume_url: "resume_uploaded"
+      }
+    ]);
+
+    if (error) {
+      console.log("Error saving profile:", error);
+    }
+
+    // Also update local state
     uploadResume();
     setUploaded(true);
     setTimeout(() => setUploaded(false), 3000);
