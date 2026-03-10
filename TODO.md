@@ -1,20 +1,20 @@
-# Supabase Integration - Completed
+# UI Enhancement Tasks
 
-## Completed Tasks:
+## Task 1: Update Color Theme (index.css)
+- [x] Change primary from purple to emerald
+- [x] Change accent from cyan to amber
+- [x] Update dark mode background colors
+- [x] Update light mode background colors
+- [x] Add new glow effects
 
-### Authentication:
-- [x] Auth.tsx - Login with Supabase verification
-- [x] SignUp.tsx - Insert new user to Supabase
+## Task 2: Enhance Auth Page UI (Auth.tsx)
+- [x] Add more 3D floating shapes
+- [x] Add animated gradient mesh background
+- [x] Add particle floating dots
+- [x] Enhance glassmorphism effects
+- [x] Update button and input styling
 
-### Admin Features:
-- [x] JobManagement.tsx - Insert job into Supabase "jobs" table
-- [x] ApplicantReview.tsx - Fetch applications, approve/reject with Supabase
-
-### Student Features:
-- [x] JobBoard.tsx - Fetch jobs and insert applications to Supabase
-- [x] Dashboard.tsx - Fetch student applications from Supabase
-- [x] Profile.tsx - Insert student profile to Supabase
-
-### Context Updates:
-- [x] AppContext.tsx - Added user ID to support Supabase foreign keys
+## Task 3: Verify Light/Dark Mode
+- [x] Test dark mode transitions
+- [x] Test light mode transitions
 

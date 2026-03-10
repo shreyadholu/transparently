@@ -2,30 +2,30 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp, Role } from '@/contexts/AppContext';
-import { User, Shield, Mail, ArrowRight, Sparkles } from 'lucide-react';
+import { User, Shield, ArrowRight, Sparkles } from 'lucide-react';
 import { supabase } from "../lib/supabase"
 
 const Auth = () => {
   const [role, setRole] = useState<Role>('student');
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const { login } = useApp();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email) return;
+    if (!name || !password) return;
 
     const { data, error } = await supabase
       .from("users")
       .select("*")
-      .eq("email", email)
       .eq("full_name", name)
+      .eq("password", password)
       .eq("role", role)
       .single();
 
     if (error || !data) {
-      alert("User not found. Please sign up first.");
+      alert("Invalid login credentials");
       return;
     }
 
@@ -143,15 +143,14 @@ const Auth = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-2">Email</label>
+                <label className="block text-sm font-medium text-muted-foreground mb-2">Password</label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder={role === 'student' ? 'jane@university.edu' : 'hr@company.com'}
-                    className="glass-input w-full pl-10 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="glass-input w-full pl-4 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
                 </div>
               </div>
@@ -184,3 +183,4 @@ const Auth = () => {
 };
 
 export default Auth;
+
