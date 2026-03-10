@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
-import { Briefcase, MapPin, Clock, CheckCircle2, Sparkles, User, TrendingUp, ArrowRight, Search, Filter, X } from 'lucide-react';
+import { Briefcase, MapPin, Clock, CheckCircle2, Sparkles, User, TrendingUp, ArrowRight, Search, Filter, X, Loader2 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 
 const container = {
@@ -24,17 +24,29 @@ const JobBoard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const [loadingJobs, setLoadingJobs] = useState(true);
 
   // Fetch jobs from Supabase on mount
   useEffect(() => {
     const fetchJobs = async () => {
-      const { data, error } = await supabase.from("jobs").select("*");
-      if (error) {
-        console.log("Error fetching jobs:", error);
-        return;
+      setLoadingJobs(true);
+      try {
+        const { data, error } = await supabase
+          .from("jobs")
+          .select("*")
+          .order("created_at", { ascending: false });
+        
+        if (error) {
+          console.error("Error fetching jobs:", error);
+        } else if (data) {
+          // Update local jobs context with data from Supabase
+          console.log("Fetched jobs from Supabase:", data);
+        }
+      } catch (err) {
+        console.error("Error fetching jobs:", err);
+      } finally {
+        setLoadingJobs(false);
       }
-      // Jobs are handled in AppContext local state
-      console.log("Fetched jobs from Supabase:", data);
     };
     fetchJobs();
   }, []);
@@ -82,30 +94,42 @@ const JobBoard = () => {
   };
 
   const handleConfirmApply = async () => {
-    if (!selectedJob) return;
+    if (!selectedJob || !user?.id) return;
 
-    // Insert application into Supabase
-    const { error } = await supabase.from("applications").insert([
-      {
-        job_id: selectedJob.id,
-        student_id: user?.id,
-        status: "pending"
+    try {
+      // Calculate resume score based on skill matching
+      const matchedSkills = user.skills.filter(s => 
+        selectedJob.skills.some(js => js.toLowerCase() === s.toLowerCase())
+      );
+      const calculatedScore = Math.round((matchedSkills.length / Math.max(selectedJob.skills.length, 1)) * 100);
+
+      // Insert application into Supabase
+      const { data: appData, error: appError } = await supabase.from("applications").insert([
+        {
+          job_id: selectedJob.id,
+          student_id: user.id,
+          status: "under_review",
+          score: calculatedScore
+        }
+      ]).select();
+
+      if (appError) {
+        console.error("Error applying to job:", appError);
+        return;
       }
-    ]);
 
-    if (error) {
-      console.log("Error applying to job:", error);
+      // Also update local state
+      applyToJob(selectedJob.id);
+      setShowSuccess(true);
+      setTimeout(() => {
+        setSheetOpen(false);
+        setShowSuccess(false);
+        setSelectedJob(null);
+        navigate('/student/activity');
+      }, 2000);
+    } catch (err) {
+      console.error("Error in application process:", err);
     }
-
-    // Also update local state
-    applyToJob(selectedJob.id);
-    setShowSuccess(true);
-    setTimeout(() => {
-      setSheetOpen(false);
-      setShowSuccess(false);
-      setSelectedJob(null);
-      navigate('/student/activity');
-    }, 2000);
   };
 
   return (
@@ -189,69 +213,76 @@ const JobBoard = () => {
         )}
       </div>
 
-      <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {filteredJobs.map((job) => {
-          const applied = hasApplied(job.id);
-          return (
-            <motion.div
-              key={job.id}
-              variants={item}
-              whileHover={{ y: -4 }}
-              className="elevated-card p-6 flex flex-col"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Briefcase className="w-5 h-5 text-primary" />
+      {loadingJobs ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <span className="ml-2 text-muted-foreground">Loading jobs...</span>
+        </div>
+      ) : (
+        <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {filteredJobs.map((job) => {
+            const applied = hasApplied(job.id);
+            return (
+              <motion.div
+                key={job.id}
+                variants={item}
+                whileHover={{ y: -4 }}
+                className="elevated-card p-6 flex flex-col"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Briefcase className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">{job.title}</h3>
+                      <p className="text-sm text-muted-foreground flex items-center gap-1">
+                        <MapPin className="w-3 h-3" /> {job.company}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold">{job.title}</h3>
-                    <p className="text-sm text-muted-foreground flex items-center gap-1">
-                      <MapPin className="w-3 h-3" /> {job.company}
-                    </p>
-                  </div>
-                </div>
-                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> New
-                </span>
-              </div>
-
-              <p className="text-sm text-muted-foreground mb-4">{job.criteria}</p>
-
-              <div className="flex flex-wrap gap-2 mb-5">
-                {job.skills.map((skill) => (
-                  <span key={skill} className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
-                    {skill}
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> New
                   </span>
-                ))}
-              </div>
+                </div>
 
-              <div className="mt-auto">
-                {applied ? (
-                  <div className="flex items-center gap-2 text-success text-sm font-medium">
-                    <CheckCircle2 className="w-4 h-4" /> Applied
-                  </div>
-                ) : (
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => handleOpenSheet(job)}
-                    className="w-full py-2.5 bg-primary/10 text-primary border border-primary/30 rounded-lg text-sm font-medium hover:bg-primary/20 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Sparkles className="w-4 h-4" /> Apply Now
-                  </motion.button>
-                )}
-              </div>
-            </motion.div>
-          );
-        })}
-        {filteredJobs.length === 0 && (
-          <div className="col-span-full elevated-card p-12 text-center">
-            <Search className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">No jobs match your search criteria</p>
-          </div>
-        )}
-      </motion.div>
+                <p className="text-sm text-muted-foreground mb-4">{job.criteria}</p>
+
+                <div className="flex flex-wrap gap-2 mb-5">
+                  {job.skills.map((skill) => (
+                    <span key={skill} className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-auto">
+                  {applied ? (
+                    <div className="flex items-center gap-2 text-success text-sm font-medium">
+                      <CheckCircle2 className="w-4 h-4" /> Applied
+                    </div>
+                  ) : (
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => handleOpenSheet(job)}
+                      className="w-full py-2.5 bg-primary/10 text-primary border border-primary/30 rounded-lg text-sm font-medium hover:bg-primary/20 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Sparkles className="w-4 h-4" /> Apply Now
+                    </motion.button>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })}
+          {filteredJobs.length === 0 && (
+            <div className="col-span-full elevated-card p-12 text-center">
+              <Search className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+              <p className="text-muted-foreground">No jobs match your search criteria</p>
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {/* Apply Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -336,3 +367,4 @@ const JobBoard = () => {
 };
 
 export default JobBoard;
+

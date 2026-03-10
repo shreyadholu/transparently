@@ -17,16 +17,20 @@ const Feedback = () => {
   const myApps = applications.filter(a => a.studentEmail === user?.email);
 
   const statusIcon = (status: string) => {
-    if (status === 'approved') return <CheckCircle2 className="w-5 h-5 text-success" />;
+    if (status === 'approved' || status === 'selected') return <CheckCircle2 className="w-5 h-5 text-success" />;
     if (status === 'rejected') return <XCircle className="w-5 h-5 text-destructive" />;
     return <Clock className="w-5 h-5 text-warning" />;
   };
 
   const statusLabel = (status: string) => {
-    if (status === 'approved') return 'Approved';
+    if (status === 'approved' || status === 'selected') return 'Approved';
     if (status === 'rejected') return 'Rejected';
     return 'Pending Review';
   };
+
+  const isApproved = (status: string) => status === 'approved' || status === 'selected';
+  const isRejected = (status: string) => status === 'rejected';
+  const isPending = (status: string) => status === 'pending' || status === 'under_review';
 
   if (myApps.length === 0) {
     return (
@@ -59,8 +63,8 @@ const Feedback = () => {
       <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-3 gap-4">
         {[
           { label: 'Total', value: myApps.length, color: 'text-primary' },
-          { label: 'Approved', value: myApps.filter(a => a.status === 'approved').length, color: 'text-success' },
-          { label: 'Pending', value: myApps.filter(a => a.status === 'pending').length, color: 'text-warning' },
+          { label: 'Approved', value: myApps.filter(a => isApproved(a.status)).length, color: 'text-success' },
+          { label: 'Pending', value: myApps.filter(a => isPending(a.status)).length, color: 'text-warning' },
         ].map(s => (
           <motion.div key={s.label} variants={item} className="elevated-card p-4 text-center">
             <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
@@ -85,7 +89,7 @@ const Feedback = () => {
                 </div>
                 <div className="flex items-center gap-2 text-sm font-medium">
                   {statusIcon(app.status)}
-                  <span className={app.status === 'approved' ? 'text-success' : app.status === 'rejected' ? 'text-destructive' : 'text-warning'}>
+                  <span className={isApproved(app.status) ? 'text-success' : isRejected(app.status) ? 'text-destructive' : 'text-warning'}>
                     {statusLabel(app.status)}
                   </span>
                 </div>
@@ -118,7 +122,7 @@ const Feedback = () => {
                     )}
                   </div>
 
-                  {app.status === 'rejected' && fb.rejectionReasons && (
+                  {isRejected(app.status) && fb.rejectionReasons && (
                     <div className="mt-4 space-y-2">
                       <p className="text-xs font-semibold text-destructive">Rejection Reasons:</p>
                       {fb.rejectionReasons.map((r, i) => (

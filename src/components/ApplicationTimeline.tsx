@@ -4,7 +4,7 @@ import { Check, Clock, FileText, Users, Award, XCircle } from 'lucide-react';
 export type ApplicationStatus = 'applied' | 'screened' | 'shortlisted' | 'interview' | 'selected' | 'rejected';
 
 interface ApplicationTimelineProps {
-  currentStatus: 'pending' | 'approved' | 'rejected';
+  currentStatus: 'pending' | 'approved' | 'rejected' | 'selected' | 'under_review';
   appliedAt?: string;
 }
 
@@ -16,9 +16,10 @@ const stages: { key: ApplicationStatus; label: string; icon: React.ElementType }
   { key: 'selected', label: 'Selected', icon: Award },
 ];
 
-const getStageIndex = (status: 'pending' | 'approved' | 'rejected'): number => {
+const getStageIndex = (status: string): number => {
   if (status === 'rejected') return -1;
-  if (status === 'approved') return 4; // All stages completed
+  if (status === 'approved' || status === 'selected') return 4; // All stages completed
+  if (status === 'under_review') return 2; // After shortlisted
   return 1; // Pending = after screened
 };
 

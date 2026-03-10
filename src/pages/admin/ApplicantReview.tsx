@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp, Application } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
-import { User, CheckCircle2, XCircle, FileText, Search, Shield } from 'lucide-react';
+import { User, CheckCircle2, XCircle, FileText, Search, Shield, Loader2 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 
 const REJECTION_REASONS = [
@@ -20,19 +20,27 @@ const ApplicantReview = () => {
   const [showRejectMenu, setShowRejectMenu] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
 
   // Fetch applications from Supabase on mount
   useEffect(() => {
     const fetchApplications = async () => {
-      const { data, error } = await supabase
-        .from("applications")
-        .select(`id, status, job_id, student_id, users(full_name,email), jobs(title,company)`);
-      
-      if (error) {
-        console.log("Error fetching applications:", error);
-        return;
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("applications")
+          .select(`id, status, job_id, student_id, score, users(full_name,email), jobs(title,company)`);
+        
+        if (error) {
+          console.error("Error fetching applications:", error);
+        } else if (data) {
+          console.log("Fetched applications from Supabase:", data);
+        }
+      } catch (err) {
+        console.error("Error fetching applications:", err);
+      } finally {
+        setLoading(false);
       }
-      console.log("Fetched applications from Supabase:", data);
     };
     fetchApplications();
   }, []);
@@ -54,33 +62,64 @@ const ApplicantReview = () => {
   };
 
   const handleApprove = async (id: string) => {
-    // Update status in Supabase
-    await supabase
-      .from("applications")
-      .update({ status: "approved" })
-      .eq("id", id);
+    try {
+      // Update status in Supabase
+      const { error } = await supabase
+        .from("applications")
+        .update({ status: "selected" })
+        .eq("id", id);
 
-    // Update local state
-    reviewApplication(id, 'approved');
-    setSheetOpen(false);
-    setSelected(null);
+      if (error) {
+        console.error("Error approving application:", error);
+        return;
+      }
+
+      // Update local state
+      reviewApplication(id, 'approved');
+      setSheetOpen(false);
+      setSelected(null);
+    } catch (err) {
+      console.error("Error approving application:", err);
+    }
   };
 
   const handleReject = async (id: string) => {
     if (rejectionReasons.length === 0) return;
 
-    // Update status in Supabase
-    await supabase
-      .from("applications")
-      .update({ status: "rejected" })
-      .eq("id", id);
+    try {
+      // Update status in Supabase
+      const { error: appError } = await supabase
+        .from("applications")
+        .update({ status: "rejected" })
+        .eq("id", id);
 
-    // Update local state
-    reviewApplication(id, 'rejected', rejectionReasons);
-    setSheetOpen(false);
-    setSelected(null);
-    setRejectionReasons([]);
-    setShowRejectMenu(false);
+      if (appError) {
+        console.error("Error rejecting application:", appError);
+        return;
+      }
+
+      // Insert feedback into Supabase
+      const { error: feedbackError } = await supabase.from("application_feedback").insert([
+        {
+          application_id: id,
+          feedback: rejectionReasons.join(', '),
+          rating: rejectionReasons.length > 2 ? 2 : 1
+        }
+      ]);
+
+      if (feedbackError) {
+        console.error("Error inserting feedback:", feedbackError);
+      }
+
+      // Update local state
+      reviewApplication(id, 'rejected', rejectionReasons);
+      setSheetOpen(false);
+      setSelected(null);
+      setRejectionReasons([]);
+      setShowRejectMenu(false);
+    } catch (err) {
+      console.error("Error rejecting application:", err);
+    }
   };
 
   const toggleReason = (reason: string) => {
@@ -108,43 +147,50 @@ const ApplicantReview = () => {
       </div>
 
       {/* List */}
-      <div className="space-y-3">
-        {filtered.length === 0 ? (
-          <div className="elevated-card p-12 text-center">
-            <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">No applicants found</p>
-          </div>
-        ) : (
-          filtered.map((app, i) => {
-            const job = jobs.find(j => j.id === app.jobId);
-            return (
-              <motion.button
-                key={app.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.03 }}
-                onClick={() => handleOpenSheet(app)}
-                className="w-full text-left p-4 rounded-xl elevated-card flex items-center gap-4"
-              >
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <User className="w-5 h-5 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">{app.studentName}</p>
-                  <p className="text-xs text-muted-foreground truncate">{job?.title} · Score: {app.resumeScore}%</p>
-                </div>
-                <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
-                  app.status === 'approved' ? 'bg-success/10 text-success' :
-                  app.status === 'rejected' ? 'bg-destructive/10 text-destructive' :
-                  'bg-warning/10 text-warning'
-                }`}>
-                  {app.status}
-                </span>
-              </motion.button>
-            );
-          })
-        )}
-      </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <span className="ml-2 text-muted-foreground">Loading applications...</span>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.length === 0 ? (
+            <div className="elevated-card p-12 text-center">
+              <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">No applicants found</p>
+            </div>
+          ) : (
+            filtered.map((app, i) => {
+              const job = jobs.find(j => j.id === app.jobId);
+              return (
+                <motion.button
+                  key={app.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.03 }}
+                  onClick={() => handleOpenSheet(app)}
+                  className="w-full text-left p-4 rounded-xl elevated-card flex items-center gap-4"
+                >
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <User className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{app.studentName}</p>
+                    <p className="text-xs text-muted-foreground truncate">{job?.title} · Score: {app.resumeScore}%</p>
+                  </div>
+                  <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
+                    app.status === 'approved' || app.status === 'selected' ? 'bg-success/10 text-success' :
+                    app.status === 'rejected' ? 'bg-destructive/10 text-destructive' :
+                    'bg-warning/10 text-warning'
+                  }`}>
+                    {app.status}
+                  </span>
+                </motion.button>
+              );
+            })
+          )}
+        </div>
+      )}
 
       {/* Slide-over Panel */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -194,7 +240,7 @@ const ApplicantReview = () => {
                 </div>
               </div>
 
-              {selected.status === 'pending' && (
+              {(selected.status === 'pending' || selected.status === 'under_review') && (
                 <div className="space-y-4">
                   <div className="flex gap-3">
                     <motion.button
@@ -257,12 +303,16 @@ const ApplicantReview = () => {
                 </div>
               )}
 
-              {selected.status !== 'pending' && (
-                <div className={`p-4 rounded-lg text-sm font-medium text-center ${
-                  selected.status === 'approved' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
-                }`}>
-                  {selected.status === 'approved' ? 'Approved for Interview ✓' : 'Declined ✗'}
-                  {selected.status === 'rejected' && selected.feedback?.rejectionReasons && (
+              {(selected.status === 'selected' || selected.status === 'approved') && (
+                <div className="p-4 rounded-lg text-sm font-medium text-center bg-success/10 text-success">
+                  Approved for Interview ✓
+                </div>
+              )}
+
+              {selected.status === 'rejected' && (
+                <div className="p-4 rounded-lg text-sm font-medium text-center bg-destructive/10 text-destructive">
+                  Declined ✗
+                  {selected.feedback?.rejectionReasons && (
                     <div className="mt-2 text-xs text-muted-foreground">
                       {selected.feedback.rejectionReasons.join(' · ')}
                     </div>
@@ -278,3 +328,4 @@ const ApplicantReview = () => {
 };
 
 export default ApplicantReview;
+

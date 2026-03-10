@@ -1,9 +1,10 @@
 import { motion } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
 import { useNavigate } from 'react-router-dom';
-import { Users, Briefcase, BarChart3, Building2, Sparkles, ArrowRight } from 'lucide-react';
+import { Users, Briefcase, BarChart3, Building2, Sparkles, ArrowRight, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { RecruiterAnalytics } from '@/components/AnalyticsCharts';
+import { supabase } from '@/lib/supabase';
 
 const container = {
   hidden: { opacity: 0 },
@@ -33,11 +34,52 @@ const AnimatedNumber = ({ value }: { value: number }) => {
 const AdminOverview = () => {
   const { applications, jobs } = useApp();
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalApplications: 0,
+    selectedCount: 0,
+    rejectedCount: 0,
+    pendingCount: 0
+  });
 
-  const stats = [
-    { icon: Users, label: 'Total Applicants', value: applications.length, gradient: 'from-primary to-primary/60', onClick: () => navigate('/admin/applicants') },
+  // Fetch analytics from Supabase
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("applications")
+          .select("status");
+
+        if (error) {
+          console.error("Error fetching analytics:", error);
+        } else if (data) {
+          const totalApplications = data.length;
+          const selectedCount = data.filter(a => a.status === 'selected' || a.status === 'approved').length;
+          const rejectedCount = data.filter(a => a.status === 'rejected').length;
+          const pendingCount = data.filter(a => a.status === 'pending' || a.status === 'under_review').length;
+
+          setStats({
+            totalApplications,
+            selectedCount,
+            rejectedCount,
+            pendingCount
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching analytics:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAnalytics();
+  }, []);
+
+  const statCards = [
+    { icon: Users, label: 'Total Applicants', value: stats.totalApplications, gradient: 'from-primary to-primary/60', onClick: () => navigate('/admin/applicants') },
     { icon: Briefcase, label: 'Active Postings', value: jobs.length, gradient: 'from-accent to-accent/60', onClick: () => navigate('/admin/active-postings') },
-    { icon: BarChart3, label: 'Pending Review', value: applications.filter(a => a.status === 'pending').length, gradient: 'from-warning to-warning/60', onClick: () => navigate('/admin/applicants') },
+    { icon: BarChart3, label: 'Pending Review', value: stats.pendingCount, gradient: 'from-warning to-warning/60', onClick: () => navigate('/admin/applicants') },
   ];
 
   return (
@@ -57,7 +99,7 @@ const AdminOverview = () => {
 
       {/* Bento Grid Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        {stats.map((s) => (
+        {statCards.map((s) => (
           <motion.div
             key={s.label}
             variants={item}
@@ -68,11 +110,42 @@ const AdminOverview = () => {
             <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${s.gradient} flex items-center justify-center mb-4 opacity-80 group-hover:opacity-100 transition-opacity`}>
               <s.icon className="w-5 h-5 text-foreground" />
             </div>
-            <p className="text-3xl font-bold mb-1 animate-count-up"><AnimatedNumber value={s.value} /></p>
-            <p className="section-header">{s.label}</p>
+            {loading ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                <span className="text-muted-foreground">Loading...</span>
+              </div>
+            ) : (
+              <>
+                <p className="text-3xl font-bold mb-1 animate-count-up"><AnimatedNumber value={s.value} /></p>
+                <p className="section-header">{s.label}</p>
+              </>
+            )}
           </motion.div>
         ))}
       </div>
+
+      {/* Analytics Summary */}
+      <motion.div variants={item}>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="elevated-card p-4 text-center">
+            <p className="text-2xl font-bold text-success">{stats.selectedCount}</p>
+            <p className="text-xs text-muted-foreground">Selected</p>
+          </div>
+          <div className="elevated-card p-4 text-center">
+            <p className="text-2xl font-bold text-destructive">{stats.rejectedCount}</p>
+            <p className="text-xs text-muted-foreground">Rejected</p>
+          </div>
+          <div className="elevated-card p-4 text-center">
+            <p className="text-2xl font-bold text-warning">{stats.pendingCount}</p>
+            <p className="text-xs text-muted-foreground">Pending</p>
+          </div>
+          <div className="elevated-card p-4 text-center">
+            <p className="text-2xl font-bold text-primary">{jobs.length}</p>
+            <p className="text-xs text-muted-foreground">Active Jobs</p>
+          </div>
+        </div>
+      </motion.div>
 
       {/* Active Postings */}
       <motion.div variants={item}>
@@ -149,7 +222,7 @@ const AdminOverview = () => {
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-mono text-primary">{app.resumeScore}%</span>
                     <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                      app.status === 'approved' ? 'bg-success/10 text-success' :
+                      app.status === 'approved' || app.status === 'selected' ? 'bg-success/10 text-success' :
                       app.status === 'rejected' ? 'bg-destructive/10 text-destructive' :
                       'bg-warning/10 text-warning'
                     }`}>
@@ -175,3 +248,4 @@ const AdminOverview = () => {
 };
 
 export default AdminOverview;
+

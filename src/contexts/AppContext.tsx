@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { analyzeResumeStrict, ResumeAnalysisResult, validateFile } from '@/lib/resumeAnalysis';
 
 export type Role = 'student' | 'recruiter';
 
@@ -21,6 +22,8 @@ export interface Job {
   postedAt: string;
 }
 
+export type ApplicationStatus = 'pending' | 'under_review' | 'selected' | 'approved' | 'rejected';
+
 export interface Application {
   id: string;
   jobId: string;
@@ -28,7 +31,7 @@ export interface Application {
   studentEmail: string;
   studentSkills: string[];
   resumeScore: number;
-  status: 'pending' | 'approved' | 'rejected';
+  status: ApplicationStatus;
   feedback?: FeedbackData;
   appliedAt: string;
 }
@@ -46,6 +49,8 @@ interface AppState {
   user: User | null;
   jobs: Job[];
   applications: Application[];
+  isAnalyzing: boolean;
+  resumeAnalysisResult: ResumeAnalysisResult | null;
   login: (name: string, email: string, role: Role, id?: string) => void;
   logout: () => void;
   addJob: (job: Omit<Job, 'id' | 'postedAt'>) => void;
@@ -54,6 +59,8 @@ interface AppState {
   reviewApplication: (appId: string, status: 'approved' | 'rejected', rejectionReasons?: string[]) => void;
   updateSkills: (skills: string[]) => void;
   uploadResume: () => void;
+  handleFileUpload: (file: File) => Promise<{ success: boolean; error?: string }>;
+  clearAnalysis: () => void;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -96,6 +103,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem('transparently_applications');
     return saved ? JSON.parse(saved) : [];
   });
+
+  // Analysis state for resume upload
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [resumeAnalysisResult, setResumeAnalysisResult] = useState<ResumeAnalysisResult | null>(null);
 
   useEffect(() => {
     if (user) localStorage.setItem('transparently_user', JSON.stringify(user));
@@ -148,8 +159,69 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateSkills = (skills: string[]) => setUser(prev => prev ? { ...prev, skills } : null);
   const uploadResume = () => setUser(prev => prev ? { ...prev, resumeUploaded: true } : null);
 
+  // Handle file upload with analysis
+  const handleFileUpload = async (file: File): Promise<{ success: boolean; error?: string }> => {
+    // Validate file
+    const validation = validateFile(file);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
+
+    try {
+      setIsAnalyzing(true);
+      setResumeAnalysisResult(null);
+
+      // Analyze the resume using strict scoring rules
+      const result = await analyzeResumeStrict(file);
+      
+      // Update state with analysis results
+      setResumeAnalysisResult(result);
+      
+      // Update user with resume data
+      setUser(prev => prev ? {
+        ...prev,
+        resumeUploaded: true,
+        resumeScore: result.resume_health.overall_score,
+        skills: [...new Set([...prev.skills, ...result.resume_health.skills_detected_count > 0 ? 
+          result.resume_health.skills_detected_count >= 4 ? 
+            ['React', 'TypeScript', 'JavaScript', 'SQL', 'Python', 'Node.js', 'CSS', 'HTML'] : 
+            prev.skills 
+          : prev.skills])]
+      } : null);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error analyzing resume:', error);
+      return { success: false, error: 'Failed to analyze resume. Please try again.' };
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Clear analysis results (for re-uploading)
+  const clearAnalysis = () => {
+    setResumeAnalysisResult(null);
+    setIsAnalyzing(false);
+  };
+
   return (
-    <AppContext.Provider value={{ user, jobs, applications, login, logout, addJob, deleteJob, applyToJob, reviewApplication, updateSkills, uploadResume }}>
+    <AppContext.Provider value={{ 
+      user, 
+      jobs, 
+      applications,
+      isAnalyzing,
+      resumeAnalysisResult,
+      login, 
+      logout, 
+      addJob, 
+      deleteJob, 
+      applyToJob, 
+      reviewApplication, 
+      updateSkills, 
+      uploadResume,
+      handleFileUpload,
+      clearAnalysis
+    }}>
       {children}
     </AppContext.Provider>
   );
