@@ -1,40 +1,19 @@
-# Resume Upload Task - Implementation Plan
+# Skill Matching Implementation TODO
 
-## Status: ✅ Completed
+## Task 1: Create Master Skill Extractor (resumeAnalysis.ts)
+- [x] Add SKILL_LIBRARY with required skills
+- [x] Add SKILL_SYNONYM_MAPPING (ReactJS→React, JS→JavaScript, React Native→React, LLM→Python)
+- [x] Implement extractActualSkills(text) function with regex \b boundaries
 
-### Tasks Completed:
-- [x] Analyze codebase structure
-- [x] Understand current implementation
-- [x] 1. Update AppContext.tsx - Add analysis state and handleFileUpload function
-- [x] 2. Update resumeAnalysis.ts - Implement user's exact scoring rules
-- [x] 3. Update Dashboard.tsx - Add hidden file input, loading state, connect to analysis
-- [x] 4. Test the implementation
+## Task 2: Update AppContext State
+- [x] Add detectedSkills state to AppContext
+- [x] Update handleFileUpload to extract and store detected skills
+- [x] Make detectedSkills the "Source of Truth" for the app
 
-## Changes Summary:
+## Task 3: Update JobBoard Skill Highlighting
+- [x] Update JobCard to compare job.skills against detectedSkills
+- [x] Apply Success style (Green) for matched skills
+- [x] Apply Neutral style (Gray) for unmatched skills
 
-### 1. AppContext.tsx Changes:
-- Added `isAnalyzing` state for loading indicator
-- Added `resumeAnalysisResult` state for storing analysis data
-- Added `handleFileUpload` function that:
-  - Validates file (PDF only, <5MB)
-  - Sets loading state
-  - Calls analyzeResumeStrict
-  - Updates state with results
-- Added `clearAnalysis` function for re-uploading
-
-### 2. resumeAnalysis.ts Changes:
-- Added HARD_SKILLS list for keyword density
-- Implemented strict scoring functions:
-  - **Contact Info (33%)**: 100 if Email + Phone + Location, deduct 33 each missing
-  - **Experience Headers (33%)**: 100 if ≥3 headers from [Experience, Education, Projects, Skills, Summary]
-  - **Keyword Density (34%)**: 100 if >8 skills, 50 if 4-7, 0 if <3
-- Added `analyzeResumeStrict` main function implementing these rules
-
-### 3. Dashboard.tsx Changes:
-- Added hidden file input with ref
-- Added loading/spinner UI during analysis
-- Connected to context's analysis functions
-- Display real scores from analysis results
-- Updated Structural Integrity component with calculated scores
-- Added "Re-upload" button for re-analyzing
+## All Tasks Completed ✅
 

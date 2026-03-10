@@ -16,7 +16,7 @@ const item = {
 };
 
 const JobBoard = () => {
-  const { jobs, applications, applyToJob, user } = useApp();
+  const { jobs, applications, applyToJob, user, detectedSkills } = useApp();
   const navigate = useNavigate();
   const [selectedJob, setSelectedJob] = useState<typeof jobs[0] | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -249,11 +249,22 @@ const JobBoard = () => {
                 <p className="text-sm text-muted-foreground mb-4">{job.criteria}</p>
 
                 <div className="flex flex-wrap gap-2 mb-5">
-                  {job.skills.map((skill) => (
-                    <span key={skill} className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
-                      {skill}
-                    </span>
-                  ))}
+                  {job.skills.map((skill) => {
+                    // Task 3: Check if skill matches detectedSkills from context
+                    const isMatch = detectedSkills.some(s => s.toLowerCase() === skill.toLowerCase());
+                    return (
+                      <span 
+                        key={skill} 
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
+                          isMatch 
+                            ? 'bg-success/10 text-success border-success/20' // Success style (Green)
+                            : 'bg-muted/30 text-muted-foreground border-border/30' // Neutral style (Gray)
+                        }`}
+                      >
+                        {skill}
+                      </span>
+                    );
+                  })}
                 </div>
 
                 <div className="mt-auto">
@@ -313,9 +324,22 @@ const JobBoard = () => {
                     </div>
                     <p className="text-sm text-muted-foreground">{selectedJob.criteria}</p>
                     <div className="flex flex-wrap gap-2 mt-3">
-                      {selectedJob.skills.map(s => (
-                        <span key={s} className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">{s}</span>
-                      ))}
+                      {selectedJob.skills.map((skill) => {
+                        // Task 3: Check if skill matches detectedSkills from context
+                        const isMatch = detectedSkills.some(s => s.toLowerCase() === skill.toLowerCase());
+                        return (
+                          <span 
+                            key={skill} 
+                            className={`text-xs px-2 py-1 rounded-full border ${
+                              isMatch 
+                                ? 'bg-success/10 text-success border-success/20' // Success style (Green)
+                                : 'bg-muted/50 text-muted-foreground border-border/30' // Neutral style (Gray)
+                            }`}
+                          >
+                            {skill}
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
                   <div className="elevated-card p-5">

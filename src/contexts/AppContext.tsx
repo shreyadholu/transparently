@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { analyzeResumeStrict, ResumeAnalysisResult, validateFile } from '@/lib/resumeAnalysis';
+import { analyzeResumeStrict, ResumeAnalysisResult, validateFile, extractActualSkills } from '@/lib/resumeAnalysis';
 
 export type Role = 'student' | 'recruiter';
 
@@ -51,6 +51,7 @@ interface AppState {
   applications: Application[];
   isAnalyzing: boolean;
   resumeAnalysisResult: ResumeAnalysisResult | null;
+  detectedSkills: string[]; // Task 2: Source of Truth for detected skills
   login: (name: string, email: string, role: Role, id?: string) => void;
   logout: () => void;
   addJob: (job: Omit<Job, 'id' | 'postedAt'>) => void;
@@ -61,6 +62,7 @@ interface AppState {
   uploadResume: () => void;
   handleFileUpload: (file: File) => Promise<{ success: boolean; error?: string }>;
   clearAnalysis: () => void;
+  setDetectedSkills: (skills: string[]) => void;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -107,6 +109,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Analysis state for resume upload
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [resumeAnalysisResult, setResumeAnalysisResult] = useState<ResumeAnalysisResult | null>(null);
+  
+  // Task 2: detectedSkills - Source of Truth for skills extracted from resume
+  const [detectedSkills, setDetectedSkills] = useState<string[]>(() => {
+    const saved = localStorage.getItem('transparently_detected_skills');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   useEffect(() => {
     if (user) localStorage.setItem('transparently_user', JSON.stringify(user));
@@ -115,6 +123,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { localStorage.setItem('transparently_jobs', JSON.stringify(jobs)); }, [jobs]);
   useEffect(() => { localStorage.setItem('transparently_applications', JSON.stringify(applications)); }, [applications]);
+  useEffect(() => { localStorage.setItem('transparently_detected_skills', JSON.stringify(detectedSkills)); }, [detectedSkills]);
 
   const login = (name: string, email: string, role: Role, id?: string) => {
     setUser({ id, name, email, role, skills: ['React', 'TypeScript', 'CSS'], resumeScore: 72, resumeUploaded: false });
@@ -171,22 +180,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setIsAnalyzing(true);
       setResumeAnalysisResult(null);
 
+      // Extract text from the resume for skill extraction
+      let resumeText = '';
+      try {
+        resumeText = await file.text();
+      } catch (e) {
+        console.warn('Could not extract text directly, using analysis result');
+      }
+
+      // Extract actual skills using the Master Skill Extractor (Task 1)
+      const extractedSkills = extractActualSkills(resumeText);
+      
+      // Update detectedSkills in global state (Source of Truth)
+      setDetectedSkills(extractedSkills);
+
       // Analyze the resume using strict scoring rules
       const result = await analyzeResumeStrict(file);
       
       // Update state with analysis results
       setResumeAnalysisResult(result);
       
-      // Update user with resume data
+      // Update user with resume data - use detectedSkills as the primary source
       setUser(prev => prev ? {
         ...prev,
         resumeUploaded: true,
         resumeScore: result.resume_health.overall_score,
-        skills: [...new Set([...prev.skills, ...result.resume_health.skills_detected_count > 0 ? 
-          result.resume_health.skills_detected_count >= 4 ? 
-            ['React', 'TypeScript', 'JavaScript', 'SQL', 'Python', 'Node.js', 'CSS', 'HTML'] : 
-            prev.skills 
-          : prev.skills])]
+        skills: extractedSkills.length > 0 ? extractedSkills : prev.skills
       } : null);
 
       return { success: true };
@@ -211,6 +230,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       applications,
       isAnalyzing,
       resumeAnalysisResult,
+      detectedSkills,
       login, 
       logout, 
       addJob, 
@@ -220,7 +240,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateSkills, 
       uploadResume,
       handleFileUpload,
-      clearAnalysis
+      clearAnalysis,
+      setDetectedSkills
     }}>
       {children}
     </AppContext.Provider>

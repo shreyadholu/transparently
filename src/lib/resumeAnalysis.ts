@@ -1,6 +1,115 @@
 // Resume Analysis Utility - ATS Structural Integrity Auditor
 // Performs rule-based analysis based on strict industry standards for Applicant Tracking Systems
 
+// =========================================
+// MASTER SKILL EXTRACTOR (Task 1)
+// =========================================
+
+// Predefined skill library for extraction
+export const SKILL_LIBRARY = [
+  'React', 'Node.js', 'Python', 'SQL', 'TypeScript', 'HTML', 'CSS', 
+  'JavaScript', 'C#', 'C++', 'Java', 'Project Management',
+  'React Native', 'Angular', 'Vue', 'Next.js', 'Express', 'Django', 
+  'Flask', 'PostgreSQL', 'MongoDB', 'Redis', 'Docker', 'Kubernetes',
+  'AWS', 'Azure', 'GCP', 'Git', 'Figma', 'Tailwind', 'REST API', 
+  'GraphQL', 'Machine Learning', 'Data Analysis', 'Excel', 'PowerPoint'
+];
+
+// Skill synonyms mapping (Task 4)
+export const SKILL_SYNONYM_MAPPING: Record<string, string> = {
+  'ReactJS': 'React',
+  'React.js': 'React',
+  'JS': 'JavaScript',
+  'ES6': 'JavaScript',
+  'Node': 'Node.js',
+  'NodeJS': 'Node.js',
+  'ExpressJS': 'Express',
+  'Express.js': 'Express',
+  'Py': 'Python',
+  'Ts': 'TypeScript',
+  'TS': 'TypeScript',
+  'C#': 'CSharp',
+  'CPP': 'C++',
+  'SQLServer': 'SQL',
+  'MySQL': 'SQL',
+  'Postgres': 'PostgreSQL',
+  'PG': 'PostgreSQL',
+  'Mongo': 'MongoDB',
+  'React Native': 'React',
+  'RN': 'React',
+  'LLM': 'Python', // Treat LLM as Python-related
+  'AI': 'Python',
+  'Machine Learning': 'Machine Learning',
+  'ML': 'Machine Learning',
+  'PM': 'Project Management',
+  'PgSQL': 'PostgreSQL'
+};
+
+/**
+ * Extracts actual skills from text using regex with word boundaries
+ * @param text - The resume text to analyze
+ * @returns Array of unique skills found (case-insensitive)
+ */
+export function extractActualSkills(text: string): string[] {
+  if (!text || text.length < 10) {
+    return [];
+  }
+
+  const lowerText = text.toLowerCase();
+  const foundSkills = new Set<string>();
+
+  // Helper function to normalize skill name
+  const normalizeSkill = (skill: string): string => {
+    const trimmed = skill.trim();
+    // Check if it's a synonym
+    if (SKILL_SYNONYM_MAPPING[trimmed]) {
+      return SKILL_SYNONYM_MAPPING[trimmed];
+    }
+    // Check if any key maps to this skill (reverse lookup)
+    for (const [alias, canonical] of Object.entries(SKILL_SYNONYM_MAPPING)) {
+      if (canonical.toLowerCase() === trimmed.toLowerCase()) {
+        return canonical;
+      }
+    }
+    return trimmed;
+  };
+
+  // Search for each skill in the library using word boundaries
+  for (const skill of SKILL_LIBRARY) {
+    // Escape special regex characters in skill name
+    const escapedSkill = skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    // Create regex with word boundaries - case insensitive
+    // \b ensures 'C' doesn't match 'Certifications' and 'Java' doesn't match 'JavaScript'
+    const skillRegex = new RegExp(`\\b${escapedSkill}\\b`, 'gi');
+    
+    if (skillRegex.test(lowerText)) {
+      const normalized = normalizeSkill(skill);
+      foundSkills.add(normalized);
+    }
+  }
+
+  // Also check for synonyms in text (if the canonical skill isn't present)
+  for (const [alias, canonical] of Object.entries(SKILL_SYNONYM_MAPPING)) {
+    // Skip if we already found the canonical form
+    if (foundSkills.has(canonical)) continue;
+    
+    const escapedAlias = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const aliasRegex = new RegExp(`\\b${escapedAlias}\\b`, 'gi');
+    
+    if (aliasRegex.test(lowerText)) {
+      foundSkills.add(canonical);
+    }
+  }
+
+  // Return as array, sorted alphabetically
+  return Array.from(foundSkills).sort();
+}
+
+// =========================================
+// END MASTER SKILL EXTRACTOR
+// =========================================
+
 export interface ResumeAnalysisResult {
   resume_health: {
     overall_score: number;
