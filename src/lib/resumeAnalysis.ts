@@ -261,6 +261,54 @@ const SKILLS_HEADERS = [
   'skills', 'technical skills', 'core competencies', 'areas of expertise', 'key skills'
 ];
 
+// Resume Authenticity Check - Verify if the document is a valid resume
+// Looks for common resume section keywords
+
+const RESUME_KEYWORDS = [
+  'education',
+  'experience',
+  'skills',
+  'projects',
+  'summary',
+  'profile',
+  'linkedin',
+  'github'
+];
+
+/**
+ * Checks if the uploaded document appears to be a resume
+ * @param text - The extracted text from the PDF
+ * @returns { isValid: boolean, missingKeywords: string[] }
+ */
+export function checkResumeAuthenticity(text: string): { isValid: boolean; missingKeywords: string[] } {
+  if (!text || text.length < 50) {
+    return {
+      isValid: false,
+      missingKeywords: RESUME_KEYWORDS
+    };
+  }
+
+  const lowerText = text.toLowerCase();
+  const foundKeywords: string[] = [];
+  const missingKeywords: string[] = [];
+
+  for (const keyword of RESUME_KEYWORDS) {
+    if (lowerText.includes(keyword)) {
+      foundKeywords.push(keyword);
+    } else {
+      missingKeywords.push(keyword);
+    }
+  }
+
+  // A document is considered a valid resume if it has at least 2 of the keywords
+  const isValid = foundKeywords.length >= 2;
+
+  return {
+    isValid,
+    missingKeywords
+  };
+}
+
 // PDF.js types
 interface PDFJSItem {
   str: string;

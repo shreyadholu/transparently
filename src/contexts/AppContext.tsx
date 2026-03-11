@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { analyzeResumeStrict, ResumeAnalysisResult, validateFile, extractActualSkills } from '@/lib/resumeAnalysis';
+import { analyzeResumeStrict, ResumeAnalysisResult, validateFile, extractActualSkills, checkResumeAuthenticity } from '@/lib/resumeAnalysis';
+import { extractTextFromPDF } from '@/lib/pdfExtractor';
 import { supabase } from '@/lib/supabase';
 
 export type Role = 'student' | 'recruiter';
@@ -226,7 +227,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateSkills = (skills: string[]) => setUser(prev => prev ? { ...prev, skills } : null);
   const uploadResume = () => setUser(prev => prev ? { ...prev, resumeUploaded: true } : null);
 
-  // Handle file upload with analysis
+  // Handle file upload with analysis - used by both Profile and Dashboard
   const handleFileUpload = async (file: File): Promise<{ success: boolean; error?: string }> => {
     // Validate file
     const validation = validateFile(file);
@@ -234,25 +235,81 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return { success: false, error: validation.error };
     }
 
+    if (!user?.id) {
+      return { success: false, error: 'User not logged in' };
+    }
+
     try {
       setIsAnalyzing(true);
       setResumeAnalysisResult(null);
 
-      // Extract text from the resume for skill extraction
-      let resumeText = '';
+      // STEP 1: Upload to Supabase Storage
+      const fileName = `${user.id}/resume.pdf`;
+      
+      // Delete old resume if exists
       try {
-        resumeText = await file.text();
+        const { data: existingFiles } = await supabase.storage
+          .from('resumes')
+          .list(`${user.id}`);
+        
+        if (existingFiles && existingFiles.length > 0) {
+          const filesToDelete = existingFiles.map(f => `${user.id}/${f.name}`);
+          await supabase.storage.from('resumes').remove(filesToDelete);
+        }
       } catch (e) {
-        console.warn('Could not extract text directly, using analysis result');
+        console.log('No existing resume to delete');
       }
 
-      // Extract actual skills using the Master Skill Extractor (Task 1)
+      // Upload new resume
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('resumes')
+        .upload(fileName, file, {
+          upsert: true
+        });
+
+      if (uploadError) {
+        console.error('Error uploading resume:', uploadError);
+        return { success: false, error: 'Failed to upload resume. Please try again.' };
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('resumes')
+        .getPublicUrl(fileName);
+
+      const resumeUrl = urlData?.publicUrl;
+
+      // STEP 2: Extract text from the resume using pdfjs-dist
+      let resumeText = '';
+      try {
+        resumeText = await extractTextFromPDF(file);
+      } catch (e) {
+        console.warn('Could not extract text using pdfjs, trying fallback:', e);
+        // Fallback
+        try {
+          resumeText = await file.text();
+        } catch (fallbackError) {
+          console.error('Fallback text extraction also failed:', fallbackError);
+        }
+      }
+
+      // STEP 3: Check resume authenticity before proceeding
+      const authenticityCheck = checkResumeAuthenticity(resumeText);
+      
+      if (!authenticityCheck.isValid) {
+        return { 
+          success: false, 
+          error: 'Uploaded PDF does not appear to be a resume. Please ensure your document includes at least two of these sections: education, experience, skills, projects, summary, profile.' 
+        };
+      }
+
+      // STEP 4: Extract actual skills using the Master Skill Extractor
       const extractedSkills = extractActualSkills(resumeText);
       
       // Update detectedSkills in global state (Source of Truth)
       setDetectedSkills(extractedSkills);
 
-      // Analyze the resume using strict scoring rules
+      // STEP 5: Analyze the resume using strict scoring rules
       const result = await analyzeResumeStrict(file);
       
       // Update state with analysis results
@@ -266,37 +323,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
         skills: extractedSkills.length > 0 ? extractedSkills : prev.skills
       } : null);
 
-      // Task 2: Save resume analysis results to Supabase
-      if (user?.id) {
-        try {
-          // First, save skills to skills table
-          // Delete existing skills for this user first to avoid duplicates
-          await supabase.from('skills').delete().eq('user_id', user.id);
+      // STEP 6: Save resume analysis results to Supabase
+      try {
+        // First, save skills to skills table
+        // Delete existing skills for this user first to avoid duplicates
+        await supabase.from('skills').delete().eq('user_id', user.id);
+        
+        // Insert new skills
+        if (extractedSkills.length > 0) {
+          const skillsToInsert = extractedSkills.map(skill => ({
+            user_id: user.id,
+            skill_name: skill
+          }));
           
-          // Insert new skills
-          if (extractedSkills.length > 0) {
-            const skillsToInsert = extractedSkills.map(skill => ({
-              user_id: user.id,
-              skill_name: skill
-            }));
+          const { error: skillsError } = await supabase
+            .from('skills')
+            .insert(skillsToInsert);
             
-            const { error: skillsError } = await supabase
-              .from('skills')
-              .insert(skillsToInsert);
-              
-            if (skillsError) {
-              console.error('Error saving skills to Supabase:', skillsError);
-            } else {
-              console.log('Successfully saved skills to Supabase:', extractedSkills);
-            }
+          if (skillsError) {
+            console.error('Error saving skills to Supabase:', skillsError);
+          } else {
+            console.log('Successfully saved skills to Supabase:', extractedSkills);
           }
-
-          // Note: The actual resume URL saving is handled in Profile.tsx during upload
-          // we just update the in-memory state
-          console.log('Successfully saved resume analysis to Supabase');
-        } catch (err) {
-          console.error('Error in Supabase save:', err);
         }
+
+        // Save profile data with resume URL
+        const { error: profileError } = await supabase.from('student_profiles').upsert({
+          user_id: user.id,
+          resume_url: resumeUrl,
+          resume_score: result.resume_health.overall_score,
+          contact_score: result.structural_integrity.contact_info_score,
+          experience_score: result.structural_integrity.experience_headers_score,
+          keyword_score: result.structural_integrity.keyword_density_score,
+          skill_coverage_score: result.structural_integrity.keyword_density_score
+        }, {
+          onConflict: 'user_id'
+        });
+
+        if (profileError) {
+          console.error('Error saving profile:', profileError);
+        }
+
+        console.log('Successfully saved resume analysis to Supabase');
+      } catch (err) {
+        console.error('Error in Supabase save:', err);
       }
 
       return { success: true };
