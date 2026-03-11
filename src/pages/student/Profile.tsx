@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
-import { validateFile, analyzeResume, ResumeAnalysisResult } from '@/lib/resumeAnalysis';
+import { validateFile, analyzeResume, ResumeAnalysisResult, extractActualSkills } from '@/lib/resumeAnalysis';
 import { Upload, Plus, X, UserCircle, FileText, CheckCircle2, Loader2, AlertCircle, File, CloudUpload, AlertTriangle } from 'lucide-react';
 
 interface ResumeAnalysisData {
@@ -67,8 +67,8 @@ const Profile = () => {
     setAnalyzing(true);
 
     try {
-      // First, upload to Supabase Storage
-      const fileName = `resume-${user?.id}-${Date.now()}.pdf`;
+      // First, upload to Supabase Storage - use user-specific folder
+      const fileName = `${user?.id}/resume-${Date.now()}.pdf`;
       
       // Delete old resume if exists
       if (user?.resumeUploaded) {
@@ -109,6 +109,16 @@ const Profile = () => {
       // Analyze the resume
       const analysisResult: ResumeAnalysisResult = await analyzeResume(file, user?.skills || []);
       
+      // Extract skills from the resume text
+      let resumeText = '';
+      try {
+        resumeText = await file.text();
+      } catch (e) {
+        console.warn('Could not extract text directly');
+      }
+      const extractedSkills = extractActualSkills(resumeText);
+      console.log('Extracted skills from resume:', extractedSkills);
+      
       const analysisData: ResumeAnalysisData = {
         overall_score: analysisResult.resume_health.overall_score,
         contact_info_score: analysisResult.structural_integrity.contact_info_score,
@@ -140,6 +150,31 @@ const Profile = () => {
 
       if (profileError) {
         console.error('Error saving profile:', profileError);
+      }
+
+      // Save extracted skills to skills table
+      // First delete existing skills for this user
+      await supabase.from('skills').delete().eq('user_id', user?.id);
+
+      // Use the extractedSkills from the resume analysis
+      // Note: extractedSkills is already defined earlier in the processFile function
+      const skillsToSave = extractedSkills;
+
+      if (skillsToSave.length > 0) {
+        const skillsToInsert = skillsToSave.map((skill: string) => ({
+          user_id: user?.id,
+          skill_name: skill
+        }));
+
+        const { error: skillsError } = await supabase
+          .from('skills')
+          .insert(skillsToInsert);
+
+        if (skillsError) {
+          console.error('Error saving skills:', skillsError);
+        } else {
+          console.log('Successfully saved skills to database:', skillsToSave);
+        }
       }
 
       // Update local state

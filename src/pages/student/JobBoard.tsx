@@ -1,9 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
+import { getJobMatch } from '@/lib/resumeAnalysis';
 import { useNavigate } from 'react-router-dom';
-import { Briefcase, MapPin, Clock, CheckCircle2, Sparkles, User, TrendingUp, ArrowRight, Search, Filter, X, Loader2 } from 'lucide-react';
+import { Briefcase, MapPin, Clock, CheckCircle2, Sparkles, User, TrendingUp, ArrowRight, Search, Filter, X, Loader2, RefreshCw } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 
 const container = {
@@ -16,7 +17,7 @@ const item = {
 };
 
 const JobBoard = () => {
-  const { jobs, applications, applyToJob, user, detectedSkills } = useApp();
+  const { jobs, applications, applyToJob, user, detectedSkills, isSyncing, syncJobsFromSupabase } = useApp();
   const navigate = useNavigate();
   const [selectedJob, setSelectedJob] = useState<typeof jobs[0] | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -31,17 +32,8 @@ const JobBoard = () => {
     const fetchJobs = async () => {
       setLoadingJobs(true);
       try {
-        const { data, error } = await supabase
-          .from("jobs")
-          .select("*")
-          .order("created_at", { ascending: false });
-        
-        if (error) {
-          console.error("Error fetching jobs:", error);
-        } else if (data) {
-          // Update local jobs context with data from Supabase
-          console.log("Fetched jobs from Supabase:", data);
-        }
+        // Use the sync function from AppContext to fetch and update jobs
+        await syncJobsFromSupabase();
       } catch (err) {
         console.error("Error fetching jobs:", err);
       } finally {
@@ -49,7 +41,7 @@ const JobBoard = () => {
       }
     };
     fetchJobs();
-  }, []);
+  }, [syncJobsFromSupabase]);
 
   // Get all unique skills from jobs
   const allSkills = useMemo(() => {
@@ -81,9 +73,11 @@ const JobBoard = () => {
   const hasApplied = (jobId: string) =>
     applications.some(a => a.jobId === jobId && a.studentEmail === user?.email);
 
+  // FIX: Use detectedSkills from AppContext for match score calculation
+  // Score = (Number of Matched Skills / Total Job Skills) * 100
   const getMatchScore = (jobSkills: string[]) => {
-    if (!user) return 0;
-    const matched = user.skills.filter(s => jobSkills.some(js => js.toLowerCase() === s.toLowerCase()));
+    if (detectedSkills.length === 0) return 0;
+    const matched = detectedSkills.filter(s => jobSkills.some(js => js.toLowerCase() === s.toLowerCase()));
     return Math.round((matched.length / Math.max(jobSkills.length, 1)) * 100);
   };
 
@@ -138,6 +132,14 @@ const JobBoard = () => {
         <h1 className="text-3xl font-bold">Job Board</h1>
         <p className="text-muted-foreground mt-1">Discover opportunities that match your skills</p>
       </div>
+
+      {/* Task 3: Syncing with Profile loading state */}
+      {isSyncing && (
+        <div className="flex items-center gap-2 px-4 py-3 bg-primary/10 border border-primary/20 rounded-lg text-sm">
+          <RefreshCw className="w-4 h-4 animate-spin text-primary" />
+          <span className="text-primary">Syncing with Profile...</span>
+        </div>
+      )}
 
       {/* Search & Filter Bar */}
       <div className="space-y-3">
@@ -250,8 +252,9 @@ const JobBoard = () => {
 
                 <div className="flex flex-wrap gap-2 mb-5">
                   {job.skills.map((skill) => {
-                    // Task 3: Check if skill matches detectedSkills from context
-                    const isMatch = detectedSkills.some(s => s.toLowerCase() === skill.toLowerCase());
+                    // Task 3: Use getJobMatch for deterministic matching with synonym support
+                    const matchedSkills = getJobMatch(job.skills, detectedSkills);
+                    const isMatch = matchedSkills.some(s => s.toLowerCase() === skill.toLowerCase());
                     return (
                       <span 
                         key={skill} 
@@ -325,8 +328,9 @@ const JobBoard = () => {
                     <p className="text-sm text-muted-foreground">{selectedJob.criteria}</p>
                     <div className="flex flex-wrap gap-2 mt-3">
                       {selectedJob.skills.map((skill) => {
-                        // Task 3: Check if skill matches detectedSkills from context
-                        const isMatch = detectedSkills.some(s => s.toLowerCase() === skill.toLowerCase());
+                        // Task 3: Use getJobMatch for deterministic matching with synonym support
+                        const matchedSkills = getJobMatch(selectedJob.skills, detectedSkills);
+                        const isMatch = matchedSkills.some(s => s.toLowerCase() === skill.toLowerCase());
                         return (
                           <span 
                             key={skill} 
@@ -347,14 +351,16 @@ const JobBoard = () => {
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm"><span className="text-muted-foreground">Name</span><span className="font-medium">{user?.name}</span></div>
                       <div className="flex justify-between text-sm"><span className="text-muted-foreground">Email</span><span className="font-medium">{user?.email}</span></div>
-                      <div className="flex justify-between text-sm"><span className="text-muted-foreground">Resume</span><span className={`font-medium ${user?.resumeUploaded ? 'text-success' : 'text-warning'}`}>{user?.resumeUploaded ? 'Uploaded' : 'Not uploaded'}</span></div>
+{/* FIX: Check detectedSkills.length > 0 instead of user?.resumeUploaded */}
+                      <div className="flex justify-between text-sm"><span className="text-muted-foreground">Resume</span><span className={`font-medium ${detectedSkills.length > 0 ? 'text-success' : 'text-warning'}`}>{detectedSkills.length > 0 ? 'Uploaded' : 'Not uploaded'}</span></div>
+{/* FIX: Use detectedSkills from AppContext - show user's detected skills with job matching */}
                       <div className="pt-2">
                         <span className="text-sm text-muted-foreground">Your Skills</span>
                         <div className="flex flex-wrap gap-1.5 mt-1.5">
-                          {user?.skills.map(s => {
+                          {detectedSkills.length > 0 ? detectedSkills.map(s => {
                             const isMatch = selectedJob.skills.some(js => js.toLowerCase() === s.toLowerCase());
                             return <span key={s} className={`text-xs px-2 py-1 rounded-full border ${isMatch ? 'bg-success/10 text-success border-success/20' : 'bg-muted/50 text-muted-foreground border-border/30'}`}>{s} {isMatch && '✓'}</span>;
-                          })}
+                          }) : <span className="text-xs text-muted-foreground">No skills detected - upload a resume to see your skills</span>}
                         </div>
                       </div>
                     </div>
@@ -373,7 +379,8 @@ const JobBoard = () => {
                       </div>
                       <div className="flex-1">
                         <p className="text-sm font-medium">{getMatchScore(selectedJob.skills) >= 70 ? 'Strong Match' : getMatchScore(selectedJob.skills) >= 40 ? 'Moderate Match' : 'Building Match'}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{user?.skills.filter(s => selectedJob.skills.some(js => js.toLowerCase() === s.toLowerCase())).length} of {selectedJob.skills.length} required skills matched</p>
+{/* FIX: Use detectedSkills for matched skills count */}
+                        <p className="text-xs text-muted-foreground mt-1">{detectedSkills.filter(s => selectedJob.skills.some(js => js.toLowerCase() === s.toLowerCase())).length} of {selectedJob.skills.length} required skills matched</p>
                       </div>
                     </div>
                   </div>

@@ -110,6 +110,74 @@ export function extractActualSkills(text: string): string[] {
 // END MASTER SKILL EXTRACTOR
 // =========================================
 
+// =========================================
+// TASK 1: JOB MATCHING ENGINE
+// =========================================
+
+/**
+ * Get matching skills between job requirements and user skills
+ * @param jobSkills - Array of skills required by the job
+ * @param userSkills - Array of skills detected from user's resume
+ * @returns Array of matching skill IDs (normalized to lowercase for consistency)
+ */
+export function getJobMatch(jobSkills: string[], userSkills: string[]): string[] {
+  if (!jobSkills || !userSkills || jobSkills.length === 0 || userSkills.length === 0) {
+    return [];
+  }
+
+  // Normalize both skill arrays to lowercase for comparison
+  const normalizedJobSkills = jobSkills.map(s => s.toLowerCase().trim());
+  const normalizedUserSkills = userSkills.map(s => s.toLowerCase().trim());
+
+  // Find matching skills
+  const matches: string[] = [];
+  
+  for (const jobSkill of normalizedJobSkills) {
+    // Check for exact match with word boundaries
+    const isMatch = normalizedUserSkills.some(userSkill => {
+      // Exact match
+      if (userSkill === jobSkill) return true;
+      
+      // Check synonym mappings - if job skill maps to a canonical form that matches user skill
+      const canonicalJob = getCanonicalSkill(jobSkill);
+      const canonicalUser = getCanonicalSkill(userSkill);
+      
+      return canonicalJob === canonicalUser && canonicalJob !== '';
+    });
+    
+    if (isMatch) {
+      matches.push(jobSkill);
+    }
+  }
+
+  return matches;
+}
+
+/**
+ * Get canonical skill name from synonym mapping
+ */
+function getCanonicalSkill(skill: string): string {
+  const lowerSkill = skill.toLowerCase().trim();
+  
+  // Check if it's a direct key in the mapping
+  if (SKILL_SYNONYM_MAPPING[lowerSkill]) {
+    return SKILL_SYNONYM_MAPPING[lowerSkill].toLowerCase();
+  }
+  
+  // Check if it's a value in the mapping (reverse lookup)
+  for (const [alias, canonical] of Object.entries(SKILL_SYNONYM_MAPPING)) {
+    if (canonical.toLowerCase() === lowerSkill) {
+      return canonical.toLowerCase();
+    }
+  }
+  
+  return lowerSkill;
+}
+
+// =========================================
+// END JOB MATCHING ENGINE
+// =========================================
+
 export interface ResumeAnalysisResult {
   resume_health: {
     overall_score: number;

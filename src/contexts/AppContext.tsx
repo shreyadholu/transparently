@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { analyzeResumeStrict, ResumeAnalysisResult, validateFile, extractActualSkills } from '@/lib/resumeAnalysis';
+import { supabase } from '@/lib/supabase';
 
 export type Role = 'student' | 'recruiter';
 
@@ -50,6 +51,7 @@ interface AppState {
   jobs: Job[];
   applications: Application[];
   isAnalyzing: boolean;
+  isSyncing: boolean; // Task 3: Loading state for "Syncing with Profile..."
   resumeAnalysisResult: ResumeAnalysisResult | null;
   detectedSkills: string[]; // Task 2: Source of Truth for detected skills
   login: (name: string, email: string, role: Role, id?: string) => void;
@@ -63,6 +65,7 @@ interface AppState {
   handleFileUpload: (file: File) => Promise<{ success: boolean; error?: string }>;
   clearAnalysis: () => void;
   setDetectedSkills: (skills: string[]) => void;
+  syncJobsFromSupabase: () => Promise<void>;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -108,6 +111,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Analysis state for resume upload
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false); // Task 3: Loading state for "Syncing with Profile..."
   const [resumeAnalysisResult, setResumeAnalysisResult] = useState<ResumeAnalysisResult | null>(null);
   
   // Task 2: detectedSkills - Source of Truth for skills extracted from resume
@@ -124,6 +128,60 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => { localStorage.setItem('transparently_jobs', JSON.stringify(jobs)); }, [jobs]);
   useEffect(() => { localStorage.setItem('transparently_applications', JSON.stringify(applications)); }, [applications]);
   useEffect(() => { localStorage.setItem('transparently_detected_skills', JSON.stringify(detectedSkills)); }, [detectedSkills]);
+
+  // Task 2: Fetch saved resume data from Supabase when user logs in
+  useEffect(() => {
+    const fetchSavedResumeData = async () => {
+      if (!user?.id) return;
+      
+      setIsSyncing(true);
+      try {
+        // Fetch from student_profiles table
+        const { data: profileData, error: profileError } = await supabase
+          .from('student_profiles')
+          .select('resume_url, resume_score, contact_score, experience_score, keyword_score, skill_coverage_score')
+          .eq('user_id', user.id)
+          .single();
+
+        if (profileError && profileError.code !== 'PGRST116') {
+          console.log('Error fetching student profile:', profileError.message);
+        } else if (profileData) {
+          // Restore resume state if resume_url exists
+          if (profileData.resume_url) {
+            setUser(prev => prev ? { 
+              ...prev, 
+              resumeUploaded: true,
+              resumeScore: profileData.resume_score || 0
+            } : null);
+            console.log('Restored resume from database:', profileData.resume_url);
+          }
+        }
+
+        // Fetch skills from skills table
+        const { data: skillsData, error: skillsError } = await supabase
+          .from('skills')
+          .select('skill_name')
+          .eq('user_id', user.id);
+
+        if (skillsError) {
+          console.log('Error fetching skills:', skillsError.message);
+        } else if (skillsData && skillsData.length > 0) {
+          const extractedSkills = skillsData.map(s => s.skill_name);
+          setDetectedSkills(extractedSkills);
+          setUser(prev => prev ? { ...prev, skills: extractedSkills } : null);
+          console.log('Restored skills from database:', extractedSkills);
+        }
+        
+        console.log('Successfully restored all resume data from Supabase');
+      } catch (err) {
+        console.error('Error fetching saved resume data:', err);
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+
+    fetchSavedResumeData();
+  }, [user?.id]);
 
   const login = (name: string, email: string, role: Role, id?: string) => {
     setUser({ id, name, email, role, skills: ['React', 'TypeScript', 'CSS'], resumeScore: 72, resumeUploaded: false });
@@ -208,6 +266,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
         skills: extractedSkills.length > 0 ? extractedSkills : prev.skills
       } : null);
 
+      // Task 2: Save resume analysis results to Supabase
+      if (user?.id) {
+        try {
+          // First, save skills to skills table
+          // Delete existing skills for this user first to avoid duplicates
+          await supabase.from('skills').delete().eq('user_id', user.id);
+          
+          // Insert new skills
+          if (extractedSkills.length > 0) {
+            const skillsToInsert = extractedSkills.map(skill => ({
+              user_id: user.id,
+              skill_name: skill
+            }));
+            
+            const { error: skillsError } = await supabase
+              .from('skills')
+              .insert(skillsToInsert);
+              
+            if (skillsError) {
+              console.error('Error saving skills to Supabase:', skillsError);
+            } else {
+              console.log('Successfully saved skills to Supabase:', extractedSkills);
+            }
+          }
+
+          // Note: The actual resume URL saving is handled in Profile.tsx during upload
+          // we just update the in-memory state
+          console.log('Successfully saved resume analysis to Supabase');
+        } catch (err) {
+          console.error('Error in Supabase save:', err);
+        }
+      }
+
       return { success: true };
     } catch (error) {
       console.error('Error analyzing resume:', error);
@@ -223,12 +314,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setIsAnalyzing(false);
   };
 
+  // Sync jobs from Supabase
+  const syncJobsFromSupabase = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('jobs')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching jobs from Supabase:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        // Map required_skills to skills
+        const mappedJobs: Job[] = data.map(job => ({
+          id: job.id,
+          title: job.title,
+          company: job.company,
+          skills: job.required_skills || job.skills || [],
+          criteria: job.description || job.criteria || '',
+          postedAt: job.created_at
+        }));
+        
+        setJobs(mappedJobs);
+        console.log('Synced jobs from Supabase:', mappedJobs);
+      }
+    } catch (err) {
+      console.error('Error syncing jobs:', err);
+    }
+  };
+
   return (
-    <AppContext.Provider value={{ 
+    <AppContext.Provider value={{
       user, 
       jobs, 
       applications,
       isAnalyzing,
+      isSyncing,
       resumeAnalysisResult,
       detectedSkills,
       login, 
@@ -241,7 +365,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       uploadResume,
       handleFileUpload,
       clearAnalysis,
-      setDetectedSkills
+      setDetectedSkills,
+      syncJobsFromSupabase
     }}>
       {children}
     </AppContext.Provider>

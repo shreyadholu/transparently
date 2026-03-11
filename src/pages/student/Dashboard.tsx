@@ -97,7 +97,8 @@ const StudentDashboard = () => {
   const appliedCount = applications.filter(a => a.studentEmail === user?.email).length;
   const approvedCount = applications.filter(a => a.studentEmail === user?.email && (a.status === 'approved' || a.status === 'selected')).length;
   const pendingCount = applications.filter(a => a.studentEmail === user?.email && (a.status === 'pending' || a.status === 'under_review')).length;
-  const hasResume = user?.resumeUploaded;
+  // Check both user state AND database for resume
+  const hasResume = user?.resumeUploaded || (resumeProfile?.resume_url != null && resumeProfile?.resume_url !== '');
 
   // Handle file selection
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
