@@ -64,50 +64,83 @@ const Profile = () => {
       return;
     }
 
+    if (!user?.id) {
+      setError('User not logged in');
+      console.error('Upload failed: User not logged in or user.id is undefined');
+      return;
+    }
+
     setUploading(true);
     setAnalyzing(true);
 
     try {
       // FIXED: Use correct upload path: resumes/{user_id}/resume.pdf
-      const fileName = `${user?.id}/resume.pdf`;
+      const fileName = `${user.id}/resume.pdf`;
+      
+      // DEBUG: Log upload details
+      console.log('=== RESUME UPLOAD DEBUG ===');
+      console.log('User ID:', user.id);
+      console.log('File Name:', file.name);
+      console.log('File Type:', file.type);
+      console.log('File Path:', fileName);
+      console.log('Bucket:', 'resumes');
+      console.log('===========================');
       
       // Delete old resume if exists
       if (user?.resumeUploaded) {
         try {
-          const { data: existingFiles } = await supabase.storage
+          const { data: existingFiles, error: listError } = await supabase.storage
             .from('resumes')
             .list(`${user.id}`);
           
+          console.log('Existing files list response:', { data: existingFiles, error: listError });
+          
           if (existingFiles && existingFiles.length > 0) {
             const filesToDelete = existingFiles.map(f => `${user.id}/${f.name}`);
-            await supabase.storage.from('resumes').remove(filesToDelete);
+            console.log('Deleting old files:', filesToDelete);
+            const { error: deleteError } = await supabase.storage.from('resumes').remove(filesToDelete);
+            console.log('Delete response:', { error: deleteError });
           }
         } catch (e) {
-          console.log('No existing resume to delete');
+          console.log('No existing resume to delete or error:', e);
         }
       }
 
-      // Upload new resume
+      // Upload new resume with proper contentType
+      console.log('Starting upload to Supabase Storage...');
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('resumes')
         .upload(fileName, file, {
-          upsert: true // Overwrite if exists
+          upsert: true, // Overwrite if exists
+          contentType: "application/pdf"
         });
+
+      // DEBUG: Log upload response
+      console.log('=== UPLOAD RESPONSE ===');
+      console.log('Upload Data:', uploadData);
+      console.log('Upload Error:', uploadError);
+      console.log('=======================');
 
       if (uploadError) {
         console.error('Error uploading resume:', uploadError);
-        setError('Failed to upload resume. Please try again.');
+        console.error('Error code:', uploadError.code);
+        console.error('Error message:', uploadError.message);
+        console.error('Error status:', uploadError.status);
+        setError(`Failed to upload resume: ${uploadError.message}`);
         setUploading(false);
         setAnalyzing(false);
         return;
       }
 
       // Get public URL
-      const { data: urlData } = supabase.storage
+      const { data: urlData, error: urlError } = supabase.storage
         .from('resumes')
         .getPublicUrl(fileName);
 
+      console.log('Public URL response:', { data: urlData, error: urlError });
+
       const resumeUrl = urlData?.publicUrl;
+      console.log('Resume URL:', resumeUrl);
 
       // STEP 1: Extract PDF text using pdfjs-dist
       let resumeText = '';
@@ -129,7 +162,7 @@ const Profile = () => {
       const authenticityCheck = checkResumeAuthenticity(resumeText);
       
       if (!authenticityCheck.isValid) {
-        setError('Uploaded PDF does not appear to be a resume. Please ensure your document includes at least two of these sections: education, experience, skills, projects, summary, profile.');
+        setError('Uploaded PDF does not appear to be a valid resume. Please ensure your document includes at least two of these sections: Education, Experience, Skills, or Projects.');
         setUploading(false);
         setAnalyzing(false);
         // Don't proceed with analysis if not a valid resume

@@ -101,20 +101,27 @@ const StudentDashboard = () => {
   const hasResume = user?.resumeUploaded || (resumeProfile?.resume_url != null && resumeProfile?.resume_url !== '');
 
   // Handle file selection
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
 
-    const result = await handleFileUpload(file);
-    if (!result.success) {
-      alert(result.error || 'Failed to upload resume');
-    }
-    
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
+  const result = await handleFileUpload(file);
+  if (!result.success) {
+    alert(result.error || 'Failed to upload resume');
+  } else {
+    // Refresh profile data from Supabase after successful upload
+    const { data: profileData } = await supabase
+      .from("student_profiles")
+      .select("resume_score, contact_score, experience_score, keyword_score, skill_coverage_score, resume_url")
+      .eq("user_id", user?.id)
+      .single();
+    if (profileData) setResumeProfile(profileData);
+  }
+  
+  if (fileInputRef.current) {
+    fileInputRef.current.value = '';
+  }
+};
 
   // Trigger file input click
   const triggerFileUpload = () => {

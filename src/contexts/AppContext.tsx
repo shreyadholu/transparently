@@ -236,6 +236,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     if (!user?.id) {
+      console.error('Upload failed: User not logged in or user.id is undefined');
       return { success: false, error: 'User not logged in' };
     }
 
@@ -246,38 +247,65 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // STEP 1: Upload to Supabase Storage
       const fileName = `${user.id}/resume.pdf`;
       
+      // DEBUG: Log upload details
+      console.log('=== RESUME UPLOAD DEBUG ===');
+      console.log('User ID:', user.id);
+      console.log('File Name:', file.name);
+      console.log('File Type:', file.type);
+      console.log('File Path:', fileName);
+      console.log('Bucket:', 'resumes');
+      console.log('===========================');
+      
       // Delete old resume if exists
       try {
-        const { data: existingFiles } = await supabase.storage
+        const { data: existingFiles, error: listError } = await supabase.storage
           .from('resumes')
           .list(`${user.id}`);
         
+        console.log('Existing files list response:', { data: existingFiles, error: listError });
+        
         if (existingFiles && existingFiles.length > 0) {
           const filesToDelete = existingFiles.map(f => `${user.id}/${f.name}`);
-          await supabase.storage.from('resumes').remove(filesToDelete);
+          console.log('Deleting old files:', filesToDelete);
+          const { error: deleteError } = await supabase.storage.from('resumes').remove(filesToDelete);
+          console.log('Delete response:', { error: deleteError });
         }
       } catch (e) {
-        console.log('No existing resume to delete');
+        console.log('No existing resume to delete or error:', e);
       }
 
-      // Upload new resume
+      // Upload new resume with proper contentType
+      console.log('Starting upload to Supabase Storage...');
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('resumes')
         .upload(fileName, file, {
-          upsert: true
+          upsert: true,
+          contentType: "application/pdf"
         });
+
+      // DEBUG: Log upload response
+      console.log('=== UPLOAD RESPONSE ===');
+      console.log('Upload Data:', uploadData);
+      console.log('Upload Error:', uploadError);
+      console.log('=======================');
 
       if (uploadError) {
         console.error('Error uploading resume:', uploadError);
-        return { success: false, error: 'Failed to upload resume. Please try again.' };
+        console.error('Error code:', uploadError.code);
+        console.error('Error message:', uploadError.message);
+        console.error('Error status:', uploadError.status);
+        return { success: false, error: `Failed to upload resume: ${uploadError.message}` };
       }
 
       // Get public URL
-      const { data: urlData } = supabase.storage
+      const { data: urlData, error: urlError } = supabase.storage
         .from('resumes')
         .getPublicUrl(fileName);
 
+      console.log('Public URL response:', { data: urlData, error: urlError });
+
       const resumeUrl = urlData?.publicUrl;
+      console.log('Resume URL:', resumeUrl);
 
       // STEP 2: Extract text from the resume using pdfjs-dist
       let resumeText = '';
@@ -296,10 +324,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // STEP 3: Check resume authenticity before proceeding
       const authenticityCheck = checkResumeAuthenticity(resumeText);
       
-      if (!authenticityCheck.isValid) {
+      if (!authenticityCheck.isValid && resumeText.length > 200) {
         return { 
           success: false, 
-          error: 'Uploaded PDF does not appear to be a resume. Please ensure your document includes at least two of these sections: education, experience, skills, projects, summary, profile.' 
+          error: 'This file doesn\'t seem to be a resume. Please upload a different file.' 
         };
       }
 

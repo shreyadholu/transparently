@@ -6,6 +6,9 @@
 // =========================================
 
 // Predefined skill library for extraction
+import { extractSkillsWithAI } from "../ai/aiSkillExtractor";
+
+// Predefined skill library
 export const SKILL_LIBRARY = [
   'React', 'Node.js', 'Python', 'SQL', 'TypeScript', 'HTML', 'CSS', 
   'JavaScript', 'C#', 'C++', 'Java', 'Project Management',
@@ -15,40 +18,181 @@ export const SKILL_LIBRARY = [
   'GraphQL', 'Machine Learning', 'Data Analysis', 'Excel', 'PowerPoint'
 ];
 
-// Skill synonyms mapping (Task 4)
+// IMPROVEMENT 1: Enhanced skill synonyms mapping for normalization
+// Maps variations to canonical skill names
 export const SKILL_SYNONYM_MAPPING: Record<string, string> = {
-  'ReactJS': 'React',
-  'React.js': 'React',
-  'JS': 'JavaScript',
-  'ES6': 'JavaScript',
-  'Node': 'Node.js',
-  'NodeJS': 'Node.js',
-  'ExpressJS': 'Express',
-  'Express.js': 'Express',
-  'Py': 'Python',
-  'Ts': 'TypeScript',
-  'TS': 'TypeScript',
-  'C#': 'CSharp',
-  'CPP': 'C++',
-  'SQLServer': 'SQL',
-  'MySQL': 'SQL',
-  'Postgres': 'PostgreSQL',
-  'PG': 'PostgreSQL',
-  'Mongo': 'MongoDB',
-  'React Native': 'React',
-  'RN': 'React',
-  'LLM': 'Python', // Treat LLM as Python-related
-  'AI': 'Python',
-  'Machine Learning': 'Machine Learning',
-  'ML': 'Machine Learning',
-  'PM': 'Project Management',
-  'PgSQL': 'PostgreSQL'
+  // React variations
+  'reactjs': 'React',
+  'react.js': 'React',
+  'react': 'React',
+  
+  // Node.js variations
+  'nodejs': 'Node.js',
+  'node.js': 'Node.js',
+  'node': 'Node.js',
+  
+  // JavaScript variations
+  'js': 'JavaScript',
+  'es6': 'JavaScript',
+  'es5': 'JavaScript',
+  'javascript': 'JavaScript',
+  
+  // TypeScript variations
+  'typescript': 'TypeScript',
+  'ts': 'TypeScript',
+  
+  // Python variations
+  'python': 'Python',
+  'py': 'Python',
+  
+  // C# variations
+  'c#': 'CSharp',
+  'csharp': 'CSharp',
+  
+  // C++ variations
+  'c++': 'C++',
+  'cpp': 'C++',
+  
+  // SQL variations
+  'sqlserver': 'SQL',
+  'mysql': 'SQL',
+  'sqlite': 'SQL',
+  
+  // PostgreSQL variations
+  'postgres': 'PostgreSQL',
+  'postgresql': 'PostgreSQL',
+  'pgsql': 'PostgreSQL',
+  'pg': 'PostgreSQL',
+  
+  // MongoDB variations
+  'mongo': 'MongoDB',
+  'mongodb': 'MongoDB',
+  
+  // Express variations
+  'expressjs': 'Express',
+  'express.js': 'Express',
+  'express': 'Express',
+  
+  // Django variations
+  'django': 'Django',
+  
+  // Flask variations
+  'flask': 'Flask',
+  
+  // Docker
+  'docker': 'Docker',
+  'dockerfile': 'Docker',
+  
+  // Kubernetes
+  'kubernetes': 'Kubernetes',
+  'k8s': 'Kubernetes',
+  
+  // AWS
+  'aws': 'AWS',
+  'amazon web services': 'AWS',
+  
+  // Azure
+  'azure': 'Azure',
+  
+  // GCP
+  'gcp': 'GCP',
+  'google cloud': 'GCP',
+  
+  // Git
+  'git': 'Git',
+  'github': 'Git',
+  'gitlab': 'Git',
+  
+  // HTML/CSS
+  'html': 'HTML',
+  'html5': 'HTML',
+  'css': 'CSS',
+  'css3': 'CSS',
+  
+  // Tailwind
+  'tailwind': 'Tailwind',
+  'tailwindcss': 'Tailwind',
+  
+  // REST API
+  'rest': 'REST API',
+  'rest api': 'REST API',
+  'restapi': 'REST API',
+  
+  // GraphQL
+  'graphql': 'GraphQL',
+  
+  // Machine Learning
+  'ml': 'Machine Learning',
+  'machine learning': 'Machine Learning',
+  'tensorflow': 'Machine Learning',
+  'pytorch': 'Machine Learning',
+  
+  // Project Management
+  'pm': 'Project Management',
+  'project management': 'Project Management',
+  
+  // Angular variations
+  'angularjs': 'Angular',
+  'angular.js': 'Angular',
+  'angular': 'Angular',
+  
+  // Vue variations
+  'vuejs': 'Vue',
+  'vue.js': 'Vue',
+  'vue': 'Vue',
+  
+  // Next.js variations
+  'nextjs': 'Next.js',
+  'next.js': 'Next.js',
+  'next': 'Next.js',
+  
+  // React Native variations
+  'reactnative': 'React Native',
+  'react native': 'React Native',
+  'rn': 'React Native',
+  
+  // Data Analysis
+  'data analysis': 'Data Analysis',
+  'dataanalytics': 'Data Analysis',
+  'analytics': 'Data Analysis',
+  
+  // Excel
+  'excel': 'Excel',
+  'microsoft excel': 'Excel',
+  
+  // PowerPoint
+  'powerpoint': 'PowerPoint',
+  'ms powerpoint': 'PowerPoint',
 };
+
+/**
+ * Normalizes a skill name to its canonical form
+ * @param skill - The skill name to normalize
+ * @returns The normalized skill name
+ */
+export function normalizeSkill(skill: string): string {
+  const trimmed = skill.trim().toLowerCase();
+  
+  // Check if it's a direct key in the mapping
+  if (SKILL_SYNONYM_MAPPING[trimmed]) {
+    return SKILL_SYNONYM_MAPPING[trimmed];
+  }
+  
+  // Check if any key maps to this skill (reverse lookup)
+  for (const [alias, canonical] of Object.entries(SKILL_SYNONYM_MAPPING)) {
+    if (canonical.toLowerCase() === trimmed) {
+      return canonical;
+    }
+  }
+  
+  // Capitalize first letter if not found in mapping
+  return skill.charAt(0).toUpperCase() + skill.slice(1).toLowerCase();
+}
 
 /**
  * Extracts actual skills from text using regex with word boundaries
  * @param text - The resume text to analyze
- * @returns Array of unique skills found (case-insensitive)
+ * @returns Array of unique skills found (case-insensitive, normalized)
  */
 export function extractActualSkills(text: string): string[] {
   if (!text || text.length < 10) {
@@ -57,22 +201,6 @@ export function extractActualSkills(text: string): string[] {
 
   const lowerText = text.toLowerCase();
   const foundSkills = new Set<string>();
-
-  // Helper function to normalize skill name
-  const normalizeSkill = (skill: string): string => {
-    const trimmed = skill.trim();
-    // Check if it's a synonym
-    if (SKILL_SYNONYM_MAPPING[trimmed]) {
-      return SKILL_SYNONYM_MAPPING[trimmed];
-    }
-    // Check if any key maps to this skill (reverse lookup)
-    for (const [alias, canonical] of Object.entries(SKILL_SYNONYM_MAPPING)) {
-      if (canonical.toLowerCase() === trimmed.toLowerCase()) {
-        return canonical;
-      }
-    }
-    return trimmed;
-  };
 
   // Search for each skill in the library using word boundaries
   for (const skill of SKILL_LIBRARY) {
@@ -84,6 +212,7 @@ export function extractActualSkills(text: string): string[] {
     const skillRegex = new RegExp(`\\b${escapedSkill}\\b`, 'gi');
     
     if (skillRegex.test(lowerText)) {
+      // Normalize the skill before adding
       const normalized = normalizeSkill(skill);
       foundSkills.add(normalized);
     }
@@ -98,11 +227,12 @@ export function extractActualSkills(text: string): string[] {
     const aliasRegex = new RegExp(`\\b${escapedAlias}\\b`, 'gi');
     
     if (aliasRegex.test(lowerText)) {
+      // Normalize to canonical form
       foundSkills.add(canonical);
     }
   }
 
-  // Return as array, sorted alphabetically
+  // Return as array, sorted alphabetically, with duplicates removed
   return Array.from(foundSkills).sort();
 }
 
@@ -261,51 +391,80 @@ const SKILLS_HEADERS = [
   'skills', 'technical skills', 'core competencies', 'areas of expertise', 'key skills'
 ];
 
-// Resume Authenticity Check - Verify if the document is a valid resume
-// Looks for common resume section keywords
+// IMPROVEMENT 2: Better Resume Section Detection
+// Uses regex patterns to detect the four main resume sections
 
-const RESUME_KEYWORDS = [
-  'education',
-  'experience',
-  'skills',
-  'projects',
-  'summary',
-  'profile',
-  'linkedin',
-  'github'
-];
+// Education section patterns
+const EDUCATION_SECTION_REGEX = /education|academic background|academic qualification|academic history|qualifications|degree program/i;
+
+// Experience section patterns
+const EXPERIENCE_SECTION_REGEX = /experience|work experience|professional experience|employment history|work history|professional background|career summary|work summary/i;
+
+// Skills section patterns
+const SKILLS_SECTION_REGEX = /skills|technical skills|core competencies|areas of expertise|key skills|technologies|technical expertise/i;
+
+// Projects section patterns
+const PROJECTS_SECTION_REGEX = /projects|personal projects|academic projects|portfolio|project experience/i;
 
 /**
- * Checks if the uploaded document appears to be a resume
+ * IMPROVEMENT 2: Checks if the uploaded document appears to be a valid resume
+ * Uses regex patterns to detect the four main resume sections:
+ * Education, Experience, Skills, Projects
+ * 
  * @param text - The extracted text from the PDF
- * @returns { isValid: boolean, missingKeywords: string[] }
+ * @returns { isValid: boolean, detectedSections: string[], missingSections: string[] }
  */
-export function checkResumeAuthenticity(text: string): { isValid: boolean; missingKeywords: string[] } {
-  if (!text || text.length < 50) {
+export function checkResumeAuthenticity(text: string): { 
+  isValid: boolean; 
+  detectedSections: string[];
+  missingSections: string[];
+} {
+  if (!text || text.length < 10) {
     return {
-      isValid: false,
-      missingKeywords: RESUME_KEYWORDS
+      isValid: true,
+      detectedSections: [],
+      missingSections: []
     };
   }
 
-  const lowerText = text.toLowerCase();
-  const foundKeywords: string[] = [];
-  const missingKeywords: string[] = [];
+  const detectedSections: string[] = [];
+  const missingSections: string[] = [];
 
-  for (const keyword of RESUME_KEYWORDS) {
-    if (lowerText.includes(keyword)) {
-      foundKeywords.push(keyword);
-    } else {
-      missingKeywords.push(keyword);
-    }
+  // Check for Education section
+  if (EDUCATION_SECTION_REGEX.test(text)) {
+    detectedSections.push('Education');
+  } else {
+    missingSections.push('Education');
   }
 
-  // A document is considered a valid resume if it has at least 2 of the keywords
-  const isValid = foundKeywords.length >= 2;
+  // Check for Experience section
+  if (EXPERIENCE_SECTION_REGEX.test(text)) {
+    detectedSections.push('Experience');
+  } else {
+    missingSections.push('Experience');
+  }
+
+  // Check for Skills section
+  if (SKILLS_SECTION_REGEX.test(text)) {
+    detectedSections.push('Skills');
+  } else {
+    missingSections.push('Skills');
+  }
+
+  // Check for Projects section
+  if (PROJECTS_SECTION_REGEX.test(text)) {
+    detectedSections.push('Projects');
+  } else {
+    missingSections.push('Projects');
+  }
+
+  // A document is considered a valid resume if at least two of these sections are detected
+  const isValid = detectedSections.length >= 2;
 
   return {
     isValid,
-    missingKeywords
+    detectedSections,
+    missingSections
   };
 }
 
@@ -332,8 +491,17 @@ interface WindowWithPDF {
 }
 
 export async function analyzeResume(file: File, _userSkills: string[]): Promise<ResumeAnalysisResult> {
-  // Extract text from PDF
+  // 1️⃣ Extract text from PDF
   const text = await extractTextFromPDF(file);
+
+  // 2️⃣ Ask AI to extract skills from the text
+  const aiSkills = await extractSkillsWithAI(text);
+
+  // 3️⃣ Also run your existing regex skill extractor
+  const detectedSkills = extractActualSkills(text);
+
+  // 4️⃣ Combine both results (remove duplicates)
+  const finalSkills = [...new Set([...detectedSkills, ...aiSkills])];
   
   if (!text || text.length < 50) {
     // Return minimum scores if no text extracted
@@ -378,8 +546,7 @@ export async function analyzeResume(file: File, _userSkills: string[]): Promise<
   return {
     resume_health: {
       overall_score: overallScore,
-      skills_detected_count: keywordResult.skillsFound
-    },
+skills_detected_count: finalSkills.length    },
     structural_integrity: {
       contact_info_score: contactResult.score,
       experience_headers_score: experienceResult.score,
