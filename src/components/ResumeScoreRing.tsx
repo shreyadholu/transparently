@@ -42,7 +42,6 @@ const ResumeScoreRing = ({ score, size = 180, strokeWidth = 10 }: ResumeScoreRin
           initial={{ strokeDashoffset: circumference }}
           animate={{ strokeDashoffset: offset }}
           transition={{ duration: 1.5, ease: 'easeOut', delay: 0.3 }}
-          style={{ filter: `drop-shadow(0 0 8px ${getColor()})` }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">

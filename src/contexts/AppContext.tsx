@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { analyzeResumeStrict, ResumeAnalysisResult, validateFile, extractActualSkills, checkResumeAuthenticity } from '@/lib/resumeAnalysis';
+import { analyzeResumeWithAI, AIResumeAnalysis } from '@/ai/aiResumeAnalyzer';
 import { extractTextFromPDF } from '@/lib/pdfExtractor';
 import { supabase } from '@/lib/supabase';
 
+// ─── Types ──────────────────────────────────────────────────────────────────
 export type Role = 'student' | 'recruiter';
 
 export interface User {
@@ -47,14 +49,32 @@ export interface FeedbackData {
   rejectionReasons?: string[];
 }
 
+// ─── Persisted dashboard data fetched from Supabase ─────────────────────────
+export interface ResumeProfileData {
+  resume_url: string | null;
+  resume_score: number | null;
+  contact_score: number | null;
+  experience_score: number | null;
+  keyword_score: number | null;
+  skill_coverage_score: number | null;
+  strengths: string[] | null;
+  weak_areas: string[] | null;
+  improvement_tips: string[] | null;
+  critical_issue: string | null;
+}
+
 interface AppState {
   user: User | null;
   jobs: Job[];
   applications: Application[];
   isAnalyzing: boolean;
-  isSyncing: boolean; // Task 3: Loading state for "Syncing with Profile..."
+  isSyncing: boolean;
+  hasProfile: boolean;                        // ← true if student_profiles row exists
   resumeAnalysisResult: ResumeAnalysisResult | null;
-  detectedSkills: string[]; // Task 2: Source of Truth for detected skills
+  aiAnalysis: AIResumeAnalysis | null;        // ← full Gemini output (current session)
+  resumeProfile: ResumeProfileData | null;    // ← persisted data from Supabase
+  detectedSkills: string[];
+  resumeUrl: string | null;
   login: (name: string, email: string, role: Role, id?: string) => void;
   logout: () => void;
   addJob: (job: Omit<Job, 'id' | 'postedAt'>) => void;
@@ -71,6 +91,7 @@ interface AppState {
 
 const AppContext = createContext<AppState | null>(null);
 
+// ─── Seed jobs ───────────────────────────────────────────────────────────────
 const INITIAL_JOBS: Job[] = [
   { id: '1', title: 'Frontend Developer', company: 'TechCorp', skills: ['React', 'TypeScript', 'Tailwind CSS', 'React Native'], criteria: '3+ years experience with modern frontend frameworks', postedAt: new Date().toISOString() },
   { id: '2', title: 'Full Stack Engineer', company: 'InnovateLab', skills: ['Node.js', 'React', 'PostgreSQL', 'Docker'], criteria: 'Experience building scalable web applications', postedAt: new Date().toISOString() },
@@ -78,141 +99,152 @@ const INITIAL_JOBS: Job[] = [
   { id: '4', title: 'Data Scientist', company: 'DataFlow', skills: ['Python', 'TensorFlow', 'SQL', 'Statistics'], criteria: 'MS in CS or related field preferred', postedAt: new Date().toISOString() },
 ];
 
+// ─── Helper ───────────────────────────────────────────────────────────────────
 function generateFeedback(studentSkills: string[], jobSkills: string[]): FeedbackData {
   const matchedSkills = studentSkills.filter(s => jobSkills.some(js => js.toLowerCase() === s.toLowerCase()));
   const skillGaps = jobSkills.filter(js => !studentSkills.some(s => s.toLowerCase() === js.toLowerCase()));
   const keywordScore = Math.round((matchedSkills.length / Math.max(jobSkills.length, 1)) * 100);
   const formatScore = Math.floor(Math.random() * 30) + 60;
   const overallScore = Math.round((keywordScore * 0.6 + formatScore * 0.4));
-
   const suggestions = [
     ...skillGaps.map(s => `Learn ${s} through online courses or projects`),
     overallScore < 70 ? 'Improve resume formatting with action verbs and metrics' : 'Consider adding quantifiable achievements',
     'Build a portfolio project showcasing your skills',
   ].slice(0, 4);
-
   return { skillGaps, formatScore, keywordScore, overallScore, suggestions };
 }
 
+// ─── Provider ─────────────────────────────────────────────────────────────────
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('transparently_user');
-    return saved ? JSON.parse(saved) : null;
+    try { return JSON.parse(localStorage.getItem('transparently_user') || 'null'); } catch { return null; }
   });
 
   const [jobs, setJobs] = useState<Job[]>(() => {
-    const saved = localStorage.getItem('transparently_jobs');
-    return saved ? JSON.parse(saved) : INITIAL_JOBS;
+    try { return JSON.parse(localStorage.getItem('transparently_jobs') || 'null') || INITIAL_JOBS; } catch { return INITIAL_JOBS; }
   });
 
   const [applications, setApplications] = useState<Application[]>(() => {
-    const saved = localStorage.getItem('transparently_applications');
-    return saved ? JSON.parse(saved) : [];
+    try { return JSON.parse(localStorage.getItem('transparently_applications') || '[]'); } catch { return []; }
   });
 
-  // Analysis state for resume upload
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false); // Task 3: Loading state for "Syncing with Profile..."
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [hasProfile, setHasProfile] = useState(false);
   const [resumeAnalysisResult, setResumeAnalysisResult] = useState<ResumeAnalysisResult | null>(null);
-  
-  // Task 2: detectedSkills - Source of Truth for skills extracted from resume
+  const [aiAnalysis, setAiAnalysis] = useState<AIResumeAnalysis | null>(null);
+  const [resumeProfile, setResumeProfile] = useState<ResumeProfileData | null>(null);
+  const [resumeUrl, setResumeUrl] = useState<string | null>(null);
   const [detectedSkills, setDetectedSkills] = useState<string[]>(() => {
-    const saved = localStorage.getItem('transparently_detected_skills');
-    return saved ? JSON.parse(saved) : [];
+    try { return JSON.parse(localStorage.getItem('transparently_detected_skills') || '[]'); } catch { return []; }
   });
 
+  // Persist user and jobs to localStorage
   useEffect(() => {
     if (user) localStorage.setItem('transparently_user', JSON.stringify(user));
     else localStorage.removeItem('transparently_user');
   }, [user]);
-
   useEffect(() => { localStorage.setItem('transparently_jobs', JSON.stringify(jobs)); }, [jobs]);
   useEffect(() => { localStorage.setItem('transparently_applications', JSON.stringify(applications)); }, [applications]);
   useEffect(() => { localStorage.setItem('transparently_detected_skills', JSON.stringify(detectedSkills)); }, [detectedSkills]);
 
-  // Task 2: Fetch saved resume data from Supabase when user logs in
+  // ─── On Login: Check for existing profile & restore dashboard data ──────────
   useEffect(() => {
-    const fetchSavedResumeData = async () => {
-      if (!user?.id) return;
-      
+    if (!user?.id) return;
+
+    const fetchProfileData = async () => {
       setIsSyncing(true);
       try {
-        // Fetch from student_profiles table
-        const { data: profileData, error: profileError } = await supabase
+        // 1. Check student_profiles (profile check on login)
+        const { data: profile, error: profileErr } = await supabase
           .from('student_profiles')
-          .select('resume_url, resume_score, contact_score, experience_score, keyword_score, skill_coverage_score')
+          .select('resume_url, resume_score, contact_score, experience_score, keyword_score, skill_coverage_score, strengths, weak_areas, improvement_tips, critical_issue')
           .eq('user_id', user.id)
           .single();
 
-        if (profileError && profileError.code !== 'PGRST116') {
-          console.log('Error fetching student profile:', profileError.message);
-        } else if (profileData) {
-          // Restore resume state if resume_url exists
-          if (profileData.resume_url) {
-            setUser(prev => prev ? { 
-              ...prev, 
-              resumeUploaded: true,
-              resumeScore: profileData.resume_score || 0
-            } : null);
-            console.log('Restored resume from database:', profileData.resume_url);
-          }
+        if (profileErr && profileErr.code !== 'PGRST116') {
+          console.error('Profile fetch error:', profileErr.message);
         }
 
-        // Fetch skills from skills table
-        const { data: skillsData, error: skillsError } = await supabase
+        if (profile && profile.resume_url) {
+          // Profile EXISTS → restore state
+          setHasProfile(true);
+          setResumeProfile(profile as ResumeProfileData);
+          setResumeUrl(profile.resume_url);
+          setUser(prev => prev ? {
+            ...prev,
+            resumeUploaded: true,
+            resumeScore: profile.resume_score || 0,
+          } : null);
+          console.log('✅ Profile restored from Supabase');
+        } else {
+          // Profile does NOT exist or has no resume
+          setHasProfile(false);
+          console.log('ℹ️ No profile found — showing upload screen');
+        }
+
+        // 2. Restore skills from skills table
+        const { data: skillsData, error: skillsErr } = await supabase
           .from('skills')
           .select('skill_name')
           .eq('user_id', user.id);
 
-        if (skillsError) {
-          console.log('Error fetching skills:', skillsError.message);
+        if (skillsErr) {
+          console.error('Skills fetch error:', skillsErr.message);
         } else if (skillsData && skillsData.length > 0) {
-          const extractedSkills = skillsData.map(s => s.skill_name);
-          setDetectedSkills(extractedSkills);
-          setUser(prev => prev ? { ...prev, skills: extractedSkills } : null);
-          console.log('Restored skills from database:', extractedSkills);
+          const names = skillsData.map(s => s.skill_name as string);
+          setDetectedSkills(names);
+          setUser(prev => prev ? { ...prev, skills: names } : null);
+          console.log('✅ Skills restored:', names.length);
         }
-        
-        console.log('Successfully restored all resume data from Supabase');
       } catch (err) {
-        console.error('Error fetching saved resume data:', err);
+        console.error('Error in fetchProfileData:', err);
       } finally {
         setIsSyncing(false);
       }
     };
 
-    fetchSavedResumeData();
-  }, [user?.id]);
+    fetchProfileData();
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ─── Auth ────────────────────────────────────────────────────────────────
   const login = (name: string, email: string, role: Role, id?: string) => {
-    setUser({ id, name, email, role, skills: ['React', 'TypeScript', 'CSS'], resumeScore: 72, resumeUploaded: false });
+    setUser({ id, name, email, role, skills: [], resumeScore: 0, resumeUploaded: false });
+    // Reset session analysis state on each new login
+    setAiAnalysis(null);
+    setResumeAnalysisResult(null);
+    setResumeProfile(null);
+    setHasProfile(false);
+    setResumeUrl(null);
   };
 
-  const logout = () => setUser(null);
+  const logout = () => {
+    setUser(null);
+    setAiAnalysis(null);
+    setResumeAnalysisResult(null);
+    setResumeProfile(null);
+    setHasProfile(false);
+    setResumeUrl(null);
+    setDetectedSkills([]);
+  };
 
-  const addJob = (job: Omit<Job, 'id' | 'postedAt'>) => {
+  // ─── Jobs ────────────────────────────────────────────────────────────────
+  const addJob = (job: Omit<Job, 'id' | 'postedAt'>) =>
     setJobs(prev => [...prev, { ...job, id: Date.now().toString(), postedAt: new Date().toISOString() }]);
-  };
 
-  const deleteJob = (jobId: string) => {
-    setJobs(prev => prev.filter(j => j.id !== jobId));
-  };
+  const deleteJob = (jobId: string) => setJobs(prev => prev.filter(j => j.id !== jobId));
 
+  // ─── Applications ─────────────────────────────────────────────────────
   const applyToJob = (jobId: string) => {
     if (!user) return;
     const job = jobs.find(j => j.id === jobId);
     if (!job) return;
     const feedback = generateFeedback(user.skills, job.skills);
     const app: Application = {
-      id: Date.now().toString(),
-      jobId,
-      studentName: user.name,
-      studentEmail: user.email,
-      studentSkills: user.skills,
-      resumeScore: feedback.overallScore,
-      status: 'pending',
-      feedback,
-      appliedAt: new Date().toISOString(),
+      id: Date.now().toString(), jobId,
+      studentName: user.name, studentEmail: user.email,
+      studentSkills: user.skills, resumeScore: feedback.overallScore,
+      status: 'pending', feedback, appliedAt: new Date().toISOString(),
     };
     setApplications(prev => [...prev, app]);
     setUser(prev => prev ? { ...prev, resumeScore: feedback.overallScore } : null);
@@ -220,251 +252,234 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const reviewApplication = (appId: string, status: 'approved' | 'rejected', rejectionReasons?: string[]) => {
     setApplications(prev => prev.map(a =>
-      a.id === appId ? { ...a, status, feedback: a.feedback ? { ...a.feedback, rejectionReasons: status === 'rejected' ? rejectionReasons : undefined } : undefined } : a
+      a.id === appId
+        ? { ...a, status, feedback: a.feedback ? { ...a.feedback, rejectionReasons: status === 'rejected' ? rejectionReasons : undefined } : undefined }
+        : a
     ));
   };
 
   const updateSkills = (skills: string[]) => setUser(prev => prev ? { ...prev, skills } : null);
   const uploadResume = () => setUser(prev => prev ? { ...prev, resumeUploaded: true } : null);
+  const clearAnalysis = () => { setResumeAnalysisResult(null); setIsAnalyzing(false); };
 
-  // Handle file upload with analysis - used by both Profile and Dashboard
+  // ─── ★ MAIN UPLOAD HANDLER (single source of truth) ─────────────────────
   const handleFileUpload = async (file: File): Promise<{ success: boolean; error?: string }> => {
-    // Validate file
     const validation = validateFile(file);
-    if (!validation.valid) {
-      return { success: false, error: validation.error };
-    }
+    if (!validation.valid) return { success: false, error: validation.error };
 
-    if (!user?.id) {
-      console.error('Upload failed: User not logged in or user.id is undefined');
+    // STEP 1: Get current user using: supabase.auth.getUser() OR context state
+    // Note: Since this app currently uses a custom 'users' table approach for login,
+    // supabase.auth.getUser() will throw an AuthSessionMissingError. We catch and ignore it 
+    // if our context user.id exists.
+    let authUser = null;
+    let authError = null;
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      authUser = data?.user || null;
+      authError = error;
+    } catch (err) {
+      // Ignore
+    }
+    
+    // We MUST use either the authUser.id or the AppContext user.id
+    const userId = authUser?.id || user?.id;
+
+    if (!userId) {
+      console.error('❌ User Error:', authError || "User not logged in");
       return { success: false, error: 'User not logged in' };
     }
+
+    if (authError && !authUser) {
+      console.log('ℹ️ Ignoring Supabase Auth error because custom user.id is present:', userId);
+    }
+
+    console.log('👤 user_id:', userId);
 
     try {
       setIsAnalyzing(true);
       setResumeAnalysisResult(null);
+      setAiAnalysis(null);
 
-      // STEP 1: Upload to Supabase Storage
-      const fileName = `${user.id}/resume.pdf`;
-      
-      // DEBUG: Log upload details
-      console.log('=== RESUME UPLOAD DEBUG ===');
-      console.log('User ID:', user.id);
-      console.log('File Name:', file.name);
-      console.log('File Type:', file.type);
-      console.log('File Path:', fileName);
-      console.log('Bucket:', 'resumes');
-      console.log('===========================');
-      
-      // Delete old resume if exists
-      try {
-        const { data: existingFiles, error: listError } = await supabase.storage
-          .from('resumes')
-          .list(`${user.id}`);
-        
-        console.log('Existing files list response:', { data: existingFiles, error: listError });
-        
-        if (existingFiles && existingFiles.length > 0) {
-          const filesToDelete = existingFiles.map(f => `${user.id}/${f.name}`);
-          console.log('Deleting old files:', filesToDelete);
-          const { error: deleteError } = await supabase.storage.from('resumes').remove(filesToDelete);
-          console.log('Delete response:', { error: deleteError });
-        }
-      } catch (e) {
-        console.log('No existing resume to delete or error:', e);
-      }
-
-      // Upload new resume with proper contentType
-      console.log('Starting upload to Supabase Storage...');
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      // STEP 2: Upload file to Action path
+      const filePath = `${userId}/resume.pdf`;
+      const { data: uploadResult, error: uploadError } = await supabase.storage
         .from('resumes')
-        .upload(fileName, file, {
+        .upload(filePath, file, { 
           upsert: true,
-          contentType: "application/pdf"
+          contentType: 'application/pdf'
         });
 
-      // DEBUG: Log upload response
-      console.log('=== UPLOAD RESPONSE ===');
-      console.log('Upload Data:', uploadData);
-      console.log('Upload Error:', uploadError);
-      console.log('=======================');
-
       if (uploadError) {
-        console.error('Error uploading resume:', uploadError);
-        console.error('Error code:', uploadError.code);
-        console.error('Error message:', uploadError.message);
-        console.error('Error status:', uploadError.status);
-        return { success: false, error: `Failed to upload resume: ${uploadError.message}` };
+        console.error('❌ upload result error:', uploadError);
+        return { success: false, error: `Failed to upload: ${uploadError.message}` };
       }
+      console.log('✅ upload result:', uploadResult);
 
-      // Get public URL
-      const { data: urlData, error: urlError } = supabase.storage
-        .from('resumes')
-        .getPublicUrl(fileName);
+      // STEP 3: Get public URL
+      const { data: urlData } = supabase.storage.from('resumes').getPublicUrl(filePath);
+      const publicUrl = urlData.publicUrl;
+      console.log('🔗 url:', publicUrl);
+      setResumeUrl(publicUrl);
 
-      console.log('Public URL response:', { data: urlData, error: urlError });
-
-      const resumeUrl = urlData?.publicUrl;
-      console.log('Resume URL:', resumeUrl);
-
-      // STEP 2: Extract text from the resume using pdfjs-dist
+      // ──── STEP 2: Extract text from PDF ─────────────────────────────────
       let resumeText = '';
       try {
         resumeText = await extractTextFromPDF(file);
-      } catch (e) {
-        console.warn('Could not extract text using pdfjs, trying fallback:', e);
-        // Fallback
-        try {
-          resumeText = await file.text();
-        } catch (fallbackError) {
-          console.error('Fallback text extraction also failed:', fallbackError);
-        }
+        console.log('📄 [PDF] Extracted text length:', resumeText.length);
+      } catch (pdfErr) {
+        console.warn('⚠️ [PDF] pdfjs failed, trying file.text():', pdfErr);
+        try { resumeText = await file.text(); } catch (_) { /* fallback failed */ }
       }
 
-      // STEP 3: Check resume authenticity before proceeding
-      const authenticityCheck = checkResumeAuthenticity(resumeText);
-      
-      if (!authenticityCheck.isValid && resumeText.length > 200) {
-        return { 
-          success: false, 
-          error: 'This file doesn\'t seem to be a resume. Please upload a different file.' 
-        };
+      if (resumeText.length < 50) {
+        console.warn('⚠️ [PDF] Very short extracted text — may be an image-based PDF');
       }
 
-      // STEP 4: Extract actual skills using the Master Skill Extractor
-      const extractedSkills = extractActualSkills(resumeText);
-      
-      // Update detectedSkills in global state (Source of Truth)
+      // Authenticity check
+      const auth = checkResumeAuthenticity(resumeText);
+      if (!auth.isValid && resumeText.length > 200) {
+        return { success: false, error: "This doesn't look like a resume. Please upload a PDF with Education, Experience, Skills, or Projects sections." };
+      }
+
+      // ──── STEP 3: AI Analysis (Gemini primary, regex fallback) ──────────
+      let geminiResult: AIResumeAnalysis | null = null;
+      let regexResult: ResumeAnalysisResult | null = null;
+
+      try {
+        console.log('🤖 [Gemini] Running AI analysis...');
+        geminiResult = await analyzeResumeWithAI(resumeText);
+        setAiAnalysis(geminiResult);
+        console.log('✅ [Gemini] Score:', geminiResult.overall_score, '| Skills:', geminiResult.skills.length);
+      } catch (geminiErr) {
+        console.warn('⚠️ [Gemini] Failed, falling back to regex:', geminiErr);
+      }
+
+      // Always run regex for the ResumeAnalysisResult shape (used by some UI components)
+      try {
+        regexResult = await analyzeResumeStrict(file);
+        setResumeAnalysisResult(regexResult);
+      } catch (regexErr) {
+        console.error('❌ [Regex] Also failed:', regexErr);
+      }
+
+      // ──── STEP 4: Extract skills ─────────────────────────────────────────
+      // Prefer Gemini skills (more accurate); fall back to regex
+      const extractedSkills: string[] =
+        (geminiResult?.skills && geminiResult.skills.length > 0)
+          ? geminiResult.skills
+          : extractActualSkills(resumeText);
+
+      console.log('🎯 [Skills] Extracted', extractedSkills.length, 'skills:', extractedSkills);
+      // ──── UPDATE UI STATE ────
       setDetectedSkills(extractedSkills);
-
-      // STEP 5: Analyze the resume using strict scoring rules
-      const result = await analyzeResumeStrict(file);
-      
-      // Update state with analysis results
-      setResumeAnalysisResult(result);
-      
-      // Update user with resume data - use detectedSkills as the primary source
       setUser(prev => prev ? {
         ...prev,
         resumeUploaded: true,
-        resumeScore: result.resume_health.overall_score,
-        skills: extractedSkills.length > 0 ? extractedSkills : prev.skills
+        resumeScore: geminiResult?.overall_score ?? regexResult?.resume_health.overall_score ?? 0,
+        skills: extractedSkills,
       } : null);
 
-      // STEP 6: Save resume analysis results to Supabase
-      try {
-        // First, save skills to skills table
-        // Delete existing skills for this user first to avoid duplicates
-        await supabase.from('skills').delete().eq('user_id', user.id);
-        
-        // Insert new skills
-        if (extractedSkills.length > 0) {
-          const skillsToInsert = extractedSkills.map(skill => ({
-            user_id: user.id,
-            skill_name: skill
-          }));
-          
-          const { error: skillsError } = await supabase
-            .from('skills')
-            .insert(skillsToInsert);
-            
-          if (skillsError) {
-            console.error('Error saving skills to Supabase:', skillsError);
-          } else {
-            console.log('Successfully saved skills to Supabase:', extractedSkills);
-          }
+      // STEP 4: Save data in student_profiles using UPSERT
+      const profilePayload = {
+        user_id:              userId,
+        resume_url:           publicUrl,
+        resume_text:          resumeText.slice(0, 10000),
+        resume_score:         geminiResult?.overall_score ?? regexResult?.resume_health.overall_score ?? 0,
+        contact_score:        geminiResult?.contact_info_score ?? regexResult?.structural_integrity.contact_info_score ?? 0,
+        experience_score:     geminiResult?.experience_score ?? regexResult?.structural_integrity.experience_headers_score ?? 0,
+        keyword_score:        geminiResult?.keyword_score ?? regexResult?.structural_integrity.keyword_density_score ?? 0,
+        skill_coverage_score: geminiResult?.skill_coverage_score ?? 0,
+        strengths:            geminiResult?.strengths ?? [],
+        weak_areas:           geminiResult?.weak_areas ?? [],
+        improvement_tips:     geminiResult?.feedback.suggestions ?? [],
+        critical_issue:       geminiResult?.feedback.critical_issue ?? null,
+      };
+
+      const { data: dbResult, error: dbError } = await supabase
+        .from('student_profiles')
+        .upsert(profilePayload, { onConflict: "user_id" })
+        .select();
+
+      if (dbError) {
+        console.error('❌ db error:', dbError);
+      } else {
+        console.log('✅ db success:', dbResult);
+        setHasProfile(true);
+        setResumeProfile(profilePayload as ResumeProfileData);
+      }
+
+      // STEP 5: Save skills
+      // First DELETE all skills for that user_id
+      const { error: skillDeleteError } = await supabase
+        .from('skills')
+        .delete()
+        .eq('user_id', userId);
+
+      if (skillDeleteError) {
+        console.error('❌ skill delete error:', skillDeleteError);
+      }
+
+      // Then INSERT new skills
+      if (extractedSkills.length > 0) {
+        const skillsToInsert = extractedSkills.map(skill => ({
+          user_id: userId,
+          skill_name: skill.trim()
+        }));
+
+        const { data: skillInsertResult, error: skillInsertError } = await supabase
+          .from('skills')
+          .insert(skillsToInsert)
+          .select();
+
+        if (skillInsertError) {
+          console.error('❌ skill insert error:', skillInsertError);
+        } else {
+          console.log('✅ skill insert result:', skillInsertResult);
         }
-
-        // Save profile data with resume URL
-        const { error: profileError } = await supabase.from('student_profiles').upsert({
-          user_id: user.id,
-          resume_url: resumeUrl,
-          resume_score: result.resume_health.overall_score,
-          contact_score: result.structural_integrity.contact_info_score,
-          experience_score: result.structural_integrity.experience_headers_score,
-          keyword_score: result.structural_integrity.keyword_density_score,
-          skill_coverage_score: result.structural_integrity.keyword_density_score
-        }, {
-          onConflict: 'user_id'
-        });
-
-        if (profileError) {
-          console.error('Error saving profile:', profileError);
-        }
-
-        console.log('Successfully saved resume analysis to Supabase');
-      } catch (err) {
-        console.error('Error in Supabase save:', err);
       }
 
       return { success: true };
     } catch (error) {
-      console.error('Error analyzing resume:', error);
-      return { success: false, error: 'Failed to analyze resume. Please try again.' };
+      console.error('❌ Unexpected error in handleFileUpload:', error);
+      return { success: false, error: 'Failed to process resume. Please try again.' };
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  // Clear analysis results (for re-uploading)
-  const clearAnalysis = () => {
-    setResumeAnalysisResult(null);
-    setIsAnalyzing(false);
-  };
-
-  // Sync jobs from Supabase
+  // ─── Sync jobs from Supabase ───────────────────────────────────────────
   const syncJobsFromSupabase = async () => {
     try {
       const { data, error } = await supabase
         .from('jobs')
         .select('*')
         .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching jobs from Supabase:', error);
-        return;
-      }
-
+      if (error) { console.error('Jobs sync error:', error); return; }
       if (data && data.length > 0) {
-        // Map required_skills to skills
-        const mappedJobs: Job[] = data.map(job => ({
+        setJobs(data.map(job => ({
           id: job.id,
           title: job.title,
           company: job.company,
           skills: job.required_skills || job.skills || [],
           criteria: job.description || job.criteria || '',
-          postedAt: job.created_at
-        }));
-        
-        setJobs(mappedJobs);
-        console.log('Synced jobs from Supabase:', mappedJobs);
+          postedAt: job.created_at,
+        })));
       }
-    } catch (err) {
-      console.error('Error syncing jobs:', err);
-    }
+    } catch (err) { console.error('Error syncing jobs:', err); }
   };
 
+  // ─── Context Value ────────────────────────────────────────────────────
   return (
     <AppContext.Provider value={{
-      user, 
-      jobs, 
-      applications,
-      isAnalyzing,
-      isSyncing,
-      resumeAnalysisResult,
-      detectedSkills,
-      login, 
-      logout, 
-      addJob, 
-      deleteJob, 
-      applyToJob, 
-      reviewApplication, 
-      updateSkills, 
-      uploadResume,
-      handleFileUpload,
-      clearAnalysis,
-      setDetectedSkills,
-      syncJobsFromSupabase
+      user, jobs, applications,
+      isAnalyzing, isSyncing, hasProfile,
+      resumeAnalysisResult, aiAnalysis, resumeProfile,
+      detectedSkills, resumeUrl,
+      login, logout, addJob, deleteJob,
+      applyToJob, reviewApplication,
+      updateSkills, uploadResume, handleFileUpload,
+      clearAnalysis, setDetectedSkills,
+      syncJobsFromSupabase,
     }}>
       {children}
     </AppContext.Provider>
