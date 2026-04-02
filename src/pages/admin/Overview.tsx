@@ -32,53 +32,25 @@ const AnimatedNumber = ({ value }: { value: number }) => {
 };
 
 const AdminOverview = () => {
-  const { applications, jobs } = useApp();
+  const { applications, jobs, user } = useApp();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    totalApplications: 0,
-    selectedCount: 0,
-    rejectedCount: 0,
-    pendingCount: 0
-  });
 
-  // Fetch analytics from Supabase
-  useEffect(() => {
-    const fetchAnalytics = async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from("applications")
-          .select("status");
+  // Filter jobs to ONLY those created by the current user (recruiter)
+  const myJobs = jobs.filter(j => j.created_by === user?.id || !j.created_by);
+  // Filter applications to only those that apply to my jobs
+  const myJobsIds = myJobs.map(j => j.id);
+  const myApps = applications.filter(a => myJobsIds.includes(a.jobId));
 
-        if (error) {
-          console.error("Error fetching analytics:", error);
-        } else if (data) {
-          const totalApplications = data.length;
-          const selectedCount = data.filter(a => a.status === 'selected' || a.status === 'approved').length;
-          const rejectedCount = data.filter(a => a.status === 'rejected').length;
-          const pendingCount = data.filter(a => a.status === 'pending' || a.status === 'under_review').length;
-
-          setStats({
-            totalApplications,
-            selectedCount,
-            rejectedCount,
-            pendingCount
-          });
-        }
-      } catch (err) {
-        console.error("Error fetching analytics:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAnalytics();
-  }, []);
+  const stats = {
+    totalApplications: myApps.length,
+    selectedCount: myApps.filter(a => a.status === 'selected' || a.status === 'approved').length,
+    rejectedCount: myApps.filter(a => a.status === 'rejected').length,
+    pendingCount: myApps.filter(a => a.status === 'pending' || a.status === 'under_review').length
+  };
 
   const statCards = [
     { icon: Users, label: 'Total Applicants', value: stats.totalApplications, gradient: 'from-primary to-primary/60', onClick: () => navigate('/admin/applicants') },
-    { icon: Briefcase, label: 'Active Postings', value: jobs.length, gradient: 'from-accent to-accent/60', onClick: () => navigate('/admin/active-postings') },
+    { icon: Briefcase, label: 'Active Postings', value: myJobs.length, gradient: 'from-accent to-accent/60', onClick: () => navigate('/admin/jobs') },
     { icon: BarChart3, label: 'Pending Review', value: stats.pendingCount, gradient: 'from-warning to-warning/60', onClick: () => navigate('/admin/applicants') },
   ];
 
@@ -110,42 +82,15 @@ const AdminOverview = () => {
             <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${s.gradient} flex items-center justify-center mb-4 opacity-80 group-hover:opacity-100 transition-opacity`}>
               <s.icon className="w-5 h-5 text-foreground" />
             </div>
-            {loading ? (
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                <span className="text-muted-foreground">Loading...</span>
-              </div>
-            ) : (
               <>
                 <p className="text-3xl font-bold mb-1 animate-count-up"><AnimatedNumber value={s.value} /></p>
                 <p className="section-header">{s.label}</p>
               </>
-            )}
-          </motion.div>
+            </motion.div>
         ))}
       </div>
 
-      {/* Analytics Summary */}
-      <motion.div variants={item}>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="elevated-card p-4 text-center">
-            <p className="text-2xl font-bold text-success">{stats.selectedCount}</p>
-            <p className="text-xs text-muted-foreground">Selected</p>
-          </div>
-          <div className="elevated-card p-4 text-center">
-            <p className="text-2xl font-bold text-destructive">{stats.rejectedCount}</p>
-            <p className="text-xs text-muted-foreground">Rejected</p>
-          </div>
-          <div className="elevated-card p-4 text-center">
-            <p className="text-2xl font-bold text-warning">{stats.pendingCount}</p>
-            <p className="text-xs text-muted-foreground">Pending</p>
-          </div>
-          <div className="elevated-card p-4 text-center">
-            <p className="text-2xl font-bold text-primary">{jobs.length}</p>
-            <p className="text-xs text-muted-foreground">Active Jobs</p>
-          </div>
-        </div>
-      </motion.div>
+
 
       {/* Active Postings */}
       <motion.div variants={item}>
@@ -160,7 +105,7 @@ const AdminOverview = () => {
           )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {jobs.slice(0, 6).map((job, i) => {
+          {myJobs.slice(0, 6).map((job, i) => {
             const jobApps = applications.filter(a => a.jobId === job.id);
             return (
               <motion.div
@@ -201,17 +146,17 @@ const AdminOverview = () => {
       <motion.div variants={item} className="elevated-card p-6">
         <div className="flex items-center justify-between mb-5">
           <h2 className="section-header text-sm">Recent Applications</h2>
-          {applications.length > 3 && (
+          {myApps.length > 3 && (
             <button onClick={() => navigate('/admin/applicants')} className="btn-view-more">
               View More <ArrowRight className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
-        {applications.length === 0 ? (
+        {myApps.length === 0 ? (
           <p className="text-muted-foreground text-sm py-4 text-center">No applications yet</p>
         ) : (
           <div className="space-y-3">
-            {applications.slice(-3).reverse().map((app) => {
+            {myApps.slice(0, 3).map((app) => {
               const job = jobs.find(j => j.id === app.jobId);
               return (
                 <div key={app.id} className="flex items-center justify-between p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>

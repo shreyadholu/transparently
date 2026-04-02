@@ -41,7 +41,8 @@ const JobBoard = () => {
       }
     };
     fetchJobs();
-  }, [syncJobsFromSupabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Get all unique skills from jobs
   const allSkills = useMemo(() => {
@@ -246,6 +247,15 @@ const JobBoard = () => {
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
                     <Clock className="w-3 h-3" /> New
                   </span>
+                </div>
+
+                <div className="flex items-center gap-4 mb-4 text-sm text-foreground/80">
+                  {job.location && (
+                    <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-primary" /> {job.location}</span>
+                  )}
+                  {job.salary_min && (
+                    <span className="flex items-center gap-1.5"><TrendingUp className="w-4 h-4 text-primary" /> ${job.salary_min.toLocaleString()} - ${job.salary_max?.toLocaleString()}</span>
+                  )}
                 </div>
 
                 <p className="text-sm text-muted-foreground mb-4">{job.criteria}</p>

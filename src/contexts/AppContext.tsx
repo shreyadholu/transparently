@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { analyzeResumeStrict, ResumeAnalysisResult, validateFile, extractActualSkills, checkResumeAuthenticity } from '@/lib/resumeAnalysis';
 import { analyzeResumeWithAI, AIResumeAnalysis } from '@/ai/aiResumeAnalyzer';
 import { extractTextFromPDF } from '@/lib/pdfExtractor';
@@ -21,6 +21,10 @@ export interface Job {
   id: string;
   title: string;
   company: string;
+  location?: string;
+  salary_min?: number;
+  salary_max?: number;
+  created_by?: string;
   skills: string[];
   criteria: string;
   postedAt: string;
@@ -31,6 +35,7 @@ export type ApplicationStatus = 'pending' | 'under_review' | 'selected' | 'appro
 export interface Application {
   id: string;
   jobId: string;
+  studentId: string;     // Added
   studentName: string;
   studentEmail: string;
   studentSkills: string[];
@@ -87,16 +92,17 @@ interface AppState {
   clearAnalysis: () => void;
   setDetectedSkills: (skills: string[]) => void;
   syncJobsFromSupabase: () => Promise<void>;
+  syncApplicationsFromSupabase: () => Promise<void>;
 }
 
 const AppContext = createContext<AppState | null>(null);
 
 // ─── Seed jobs ───────────────────────────────────────────────────────────────
 const INITIAL_JOBS: Job[] = [
-  { id: '1', title: 'Frontend Developer', company: 'TechCorp', skills: ['React', 'TypeScript', 'Tailwind CSS', 'React Native'], criteria: '3+ years experience with modern frontend frameworks', postedAt: new Date().toISOString() },
-  { id: '2', title: 'Full Stack Engineer', company: 'InnovateLab', skills: ['Node.js', 'React', 'PostgreSQL', 'Docker'], criteria: 'Experience building scalable web applications', postedAt: new Date().toISOString() },
-  { id: '3', title: 'UI/UX Designer', company: 'DesignHub', skills: ['Figma', 'CSS', 'User Research', 'Prototyping'], criteria: 'Strong portfolio with B2B SaaS experience', postedAt: new Date().toISOString() },
-  { id: '4', title: 'Data Scientist', company: 'DataFlow', skills: ['Python', 'TensorFlow', 'SQL', 'Statistics'], criteria: 'MS in CS or related field preferred', postedAt: new Date().toISOString() },
+  { id: '1', title: 'Frontend Developer', company: 'TechCorp', location: 'Remote', salary_min: 80000, salary_max: 120000, skills: ['React', 'TypeScript', 'Tailwind CSS', 'React Native'], criteria: '3+ years experience with modern frontend frameworks', postedAt: new Date().toISOString() },
+  { id: '2', title: 'Full Stack Engineer', company: 'InnovateLab', location: 'New York, NY', salary_min: 100000, salary_max: 150000, skills: ['Node.js', 'React', 'PostgreSQL', 'Docker'], criteria: 'Experience building scalable web applications', postedAt: new Date().toISOString() },
+  { id: '3', title: 'UI/UX Designer', company: 'DesignHub', location: 'San Francisco, CA', salary_min: 90000, salary_max: 130000, skills: ['Figma', 'CSS', 'User Research', 'Prototyping'], criteria: 'Strong portfolio with B2B SaaS experience', postedAt: new Date().toISOString() },
+  { id: '4', title: 'Data Scientist', company: 'DataFlow', location: 'Remote', salary_min: 120000, salary_max: 180000, skills: ['Python', 'TensorFlow', 'SQL', 'Statistics'], criteria: 'MS in CS or related field preferred', postedAt: new Date().toISOString() },
 ];
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -205,6 +211,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     fetchProfileData();
+    syncApplicationsFromSupabase();
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Auth ────────────────────────────────────────────────────────────────
@@ -242,6 +249,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const feedback = generateFeedback(user.skills, job.skills);
     const app: Application = {
       id: Date.now().toString(), jobId,
+      studentId: user.id || '',
       studentName: user.name, studentEmail: user.email,
       studentSkills: user.skills, resumeScore: feedback.overallScore,
       status: 'pending', feedback, appliedAt: new Date().toISOString(),
@@ -448,7 +456,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // ─── Sync jobs from Supabase ───────────────────────────────────────────
-  const syncJobsFromSupabase = async () => {
+  const syncJobsFromSupabase = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('jobs')
@@ -460,13 +468,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
           id: job.id,
           title: job.title,
           company: job.company,
+          location: job.location,
+          salary_min: job.salary_min,
+          salary_max: job.salary_max,
+          created_by: job.created_by,
           skills: job.required_skills || job.skills || [],
           criteria: job.description || job.criteria || '',
           postedAt: job.created_at,
         })));
       }
     } catch (err) { console.error('Error syncing jobs:', err); }
-  };
+  }, []);
+
+  // ─── Sync applications from Supabase ─────────────────────────────────────
+  const syncApplicationsFromSupabase = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('applications')
+        .select(`id, status, job_id, student_id, score, created_at, users(full_name, email), jobs(title, company), application_feedback(recruiter_notes)`)
+        .order('created_at', { ascending: false });
+      
+      if (error) { console.error('Apps sync error:', error); return; }
+      if (data) {
+        const mappedApps = data.map((row: any) => {
+          const notes = row.application_feedback?.[0]?.recruiter_notes;
+          const rejectionReasons = notes ? notes.split(', ') : undefined;
+          
+          return {
+            id: row.id,
+            jobId: row.job_id,
+            studentId: row.student_id,
+            studentName: row.users?.full_name || 'Unknown User',
+            studentEmail: row.users?.email || '',
+            studentSkills: [], // We don't fetch skills here to map, but they fetch them in the profile viewer
+            resumeScore: row.score || 0,
+            status: row.status,
+            feedback: {
+              skillGaps: [],
+              formatScore: 85,
+              keywordScore: row.score ? Math.min(row.score + 10, 100) : 70,
+              overallScore: row.score || 0,
+              suggestions: [],
+              rejectionReasons
+            },
+            appliedAt: row.created_at || new Date().toISOString(),
+          } as Application;
+        });
+        setApplications(mappedApps);
+      }
+    } catch (err) { console.error('Error syncing applications:', err); }
+  }, []);
 
   // ─── Context Value ────────────────────────────────────────────────────
   return (
@@ -479,7 +530,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       applyToJob, reviewApplication,
       updateSkills, uploadResume, handleFileUpload,
       clearAnalysis, setDetectedSkills,
-      syncJobsFromSupabase,
+      syncJobsFromSupabase, syncApplicationsFromSupabase,
     }}>
       {children}
     </AppContext.Provider>

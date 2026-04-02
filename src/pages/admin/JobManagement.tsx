@@ -8,11 +8,16 @@ const JobManagement = () => {
   const { jobs, addJob, deleteJob, user } = useApp();
   const [title, setTitle] = useState('');
   const [company, setCompany] = useState('');
+  const [location, setLocation] = useState('');
+  const [salaryMin, setSalaryMin] = useState<number>(50000);
+  const [salaryMax, setSalaryMax] = useState<number>(100000);
   const [criteria, setCriteria] = useState('');
   const [skillInput, setSkillInput] = useState('');
   const [skills, setSkills] = useState<string[]>([]);
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const myJobs = jobs.filter(j => j.created_by === user?.id || !j.created_by);
 
   const handleAddSkill = () => {
     if (!skillInput.trim()) return;
@@ -36,6 +41,9 @@ const JobManagement = () => {
         {
           title: title,
           company: company,
+          location: location,
+          salary_min: salaryMin,
+          salary_max: salaryMax,
           description: criteria,
           required_skills: skills,
           created_by: user.id
@@ -49,9 +57,12 @@ const JobManagement = () => {
       }
 
       // Also update local state
-      addJob({ title, company, skills, criteria });
+      addJob({ title, company, location, salary_min: salaryMin, salary_max: salaryMax, skills, criteria, created_by: user.id });
       setTitle('');
       setCompany('');
+      setLocation('');
+      setSalaryMin(50000);
+      setSalaryMax(100000);
       setCriteria('');
       setSkills([]);
       setSuccess(true);
@@ -116,6 +127,41 @@ const JobManagement = () => {
                 className="glass-input w-full px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/50" 
               />
             </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm text-muted-foreground mb-1.5">Location</label>
+                <input 
+                  value={location} 
+                  onChange={e => setLocation(e.target.value)} 
+                  placeholder="e.g. Remote" 
+                  className="glass-input w-full px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/50" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-muted-foreground mb-1.5">Min Salary ($)</label>
+                <select 
+                  value={salaryMin} 
+                  onChange={e => setSalaryMin(Number(e.target.value))} 
+                  className="glass-input w-full px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 appearance-none bg-card"
+                >
+                  {[30000, 40000, 50000, 60000, 80000, 100000, 120000, 150000, 200000].map(val => (
+                    <option key={val} value={val}>${val.toLocaleString()}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-muted-foreground mb-1.5">Max Salary ($)</label>
+                <select 
+                  value={salaryMax} 
+                  onChange={e => setSalaryMax(Number(e.target.value))} 
+                  className="glass-input w-full px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 appearance-none bg-card"
+                >
+                  {[50000, 60000, 80000, 100000, 120000, 150000, 200000, 250000, 300000].map(val => (
+                    <option key={val} value={val}>${val.toLocaleString()}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
             <div>
               <label className="block text-sm text-muted-foreground mb-1.5">Criteria</label>
               <textarea 
@@ -179,8 +225,8 @@ const JobManagement = () => {
           transition={{ delay: 0.1 }}
           className="space-y-4"
         >
-          <h2 className="text-lg font-semibold">Active Postings ({jobs.length})</h2>
-          {jobs.map((job, i) => (
+          <h2 className="text-lg font-semibold">Active Postings ({myJobs.length})</h2>
+          {myJobs.map((job, i) => (
             <motion.div
               key={job.id}
               initial={{ opacity: 0, x: 20 }}
@@ -192,7 +238,9 @@ const JobManagement = () => {
                 <Briefcase className="w-5 h-5 text-accent flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm">{job.title}</p>
-                  <p className="text-xs text-muted-foreground">{job.company} · {job.skills.length} skills required</p>
+                  <p className="text-xs text-muted-foreground">
+                    {job.company} {job.location && `· ${job.location}`} {job.salary_min && `· $${(job.salary_min/1000).toFixed(0)}k-$${(job.salary_max!/1000).toFixed(0)}k`} · {job.skills.length} skills required
+                  </p>
                 </div>
                 <button
                   onClick={() => handleDeleteJob(job.id)}

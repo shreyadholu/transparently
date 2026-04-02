@@ -108,63 +108,65 @@ const StudentDashboard = () => {
       <motion.div variants={container} initial="hidden" animate="show" className="max-w-5xl mx-auto space-y-8">
         <input ref={fileInputRef} type="file" accept=".pdf" onChange={handleFileChange} className="hidden" />
 
-        <motion.div variants={item} className="flex flex-col gap-1">
+        <motion.div variants={item} className="flex flex-col gap-1 border-b border-border pb-6">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Welcome, {user?.name}</h1>
-          <p className="text-muted-foreground">Upload your resume to begin your career journey.</p>
+          <p className="text-muted-foreground font-medium">Upload your resume to begin your career journey.</p>
         </motion.div>
 
         {/* Stats Grid */}
-        <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-4 gap-5 mt-6">
           {stats.map((s) => (
-            <div key={s.label} onClick={s.onClick} className={`p-4 rounded-xl bg-card border border-border shadow-sm flex items-center gap-4 transition-colors ${s.onClick ? 'cursor-pointer hover:border-primary/50' : ''}`}>
-              <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                <s.icon className="w-5 h-5 text-foreground" />
+            <div key={s.label} onClick={s.onClick} className={`p-5 rounded-2xl bg-card border border-border shadow-sm flex items-center gap-5 transition-all duration-300 ${s.onClick ? 'cursor-pointer hover:border-primary/50 hover:shadow-md hover:-translate-y-0.5' : ''}`}>
+              <div className="w-12 h-12 rounded-xl bg-muted border border-border shadow-inner flex items-center justify-center flex-shrink-0">
+                <s.icon className="w-6 h-6 text-foreground/80" />
               </div>
               <div>
-                <p className="text-sm font-medium text-muted-foreground">{s.label}</p>
-                <p className="text-xl font-bold text-foreground">{s.value}</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{s.label}</p>
+                <p className="text-2xl font-bold tracking-tight text-foreground mt-0.5">{s.value}</p>
               </div>
             </div>
           ))}
         </motion.div>
 
         {/* Upload card */}
-        <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-8 lg:p-12 flex flex-col items-center text-center mt-6">
-          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-6">
-            <Upload className="w-8 h-8 text-primary" />
+        <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-8 lg:p-12 flex flex-col items-center text-center mt-8 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent"></div>
+          
+          <div className="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center mb-8 border border-primary/20 shadow-sm">
+            <Upload className="w-10 h-10 text-primary" />
           </div>
 
-          <h2 className="text-2xl font-semibold mb-2 text-foreground">Upload your Resume</h2>
-          <p className="text-muted-foreground mb-8 max-w-md">
+          <h2 className="text-2xl font-bold tracking-tight mb-3 text-foreground">Upload your Resume</h2>
+          <p className="text-muted-foreground mb-10 max-w-lg leading-relaxed font-medium">
             Our AI ATS scanner will extract your skills, score your formatting, and provide professional suggestions to improve your chances.
           </p>
 
           {uploadError && (
-            <div className="mb-6 w-full max-w-md p-4 rounded-lg bg-destructive/10 border border-destructive/20 flex items-start gap-3 text-sm text-destructive font-medium text-left">
+            <div className="mb-8 w-full max-w-md p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex items-start gap-3 text-sm text-destructive font-semibold text-left shadow-sm">
               <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
               <span>{uploadError}</span>
             </div>
           )}
 
           {isAnalyzing ? (
-            <div className="w-full max-w-md py-12 border-2 border-dashed border-primary/30 bg-primary/5 rounded-xl flex flex-col items-center gap-4">
-              <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            <div className="w-full max-w-md py-12 border-2 border-dashed border-primary/30 bg-primary/5 rounded-2xl flex flex-col items-center gap-5 shadow-inner">
+              <Loader2 className="w-10 h-10 text-primary animate-spin" />
               <div className="text-center">
-                <p className="text-sm font-semibold text-foreground">Analyzing with AI...</p>
-                <p className="text-xs text-muted-foreground mt-1">Extracting keywords and calculating your score</p>
+                <p className="text-base font-bold text-foreground">Analyzing with AI...</p>
+                <p className="text-sm font-medium text-muted-foreground mt-1">Extracting keywords and calculating your score</p>
               </div>
             </div>
           ) : (
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-full max-w-md py-12 border-2 border-dashed border-border hover:border-primary hover:bg-muted/50 rounded-xl flex flex-col items-center gap-3 transition-all duration-200 group"
+              className="w-full max-w-md py-14 border-2 border-dashed border-border hover:border-primary/50 hover:bg-muted/30 rounded-2xl flex flex-col items-center gap-4 transition-all duration-300 group"
             >
-              <div className="w-10 h-10 rounded-full bg-background border border-border shadow-sm flex items-center justify-center group-hover:scale-105 transition-transform">
-                <Upload className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+              <div className="w-12 h-12 rounded-full bg-background border border-border shadow-sm flex items-center justify-center group-hover:scale-110 transition-transform duration-300 group-hover:shadow-md">
+                <Upload className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
               </div>
               <div className="text-center">
-                <p className="text-sm font-medium text-foreground">Click or drag PDF to upload</p>
-                <p className="text-xs text-muted-foreground mt-1">Maximum file size 5MB</p>
+                <p className="text-base font-semibold text-foreground group-hover:text-primary transition-colors">Click or drag PDF to upload</p>
+                <p className="text-sm font-medium text-muted-foreground mt-1.5">Maximum file size 5MB</p>
               </div>
             </button>
           )}
@@ -177,19 +179,19 @@ const StudentDashboard = () => {
   // ACTIVE STATE — Full Dashboard
   // ════════════════════════════════════════════════════════════════════════════
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="max-w-6xl mx-auto space-y-6 pb-12">
+    <motion.div variants={container} initial="hidden" animate="show" className="max-w-7xl mx-auto space-y-8 pb-12">
       <input ref={fileInputRef} type="file" accept=".pdf" onChange={handleFileChange} className="hidden" />
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <motion.div variants={item} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-1">Review your ATS score, detected skills, and feedback.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1 font-medium">Review your ATS score, detected skills, and feedback.</p>
         </div>
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={isAnalyzing}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-secondary text-secondary-foreground hover:bg-secondary/90 transition-colors disabled:opacity-50 border border-border"
+          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md hover:shadow-lg disabled:opacity-50"
         >
           {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           {isAnalyzing ? 'Analyzing...' : 'Update Resume'}
@@ -198,7 +200,7 @@ const StudentDashboard = () => {
 
       {/* Upload error */}
       {uploadError && (
-        <motion.div variants={item} className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 flex items-start gap-3 text-sm text-destructive font-medium">
+        <motion.div variants={item} className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex items-start gap-3 text-sm text-destructive font-medium shadow-sm">
           <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
           <span>{uploadError}</span>
         </motion.div>
@@ -206,56 +208,59 @@ const StudentDashboard = () => {
 
       {/* Analyzing indicator */}
       {isAnalyzing && (
-        <motion.div variants={item} className="p-4 rounded-lg bg-primary/10 border border-primary/20 flex items-center gap-4">
-          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+        <motion.div variants={item} className="p-5 rounded-xl bg-primary/5 border border-primary/20 flex items-center gap-5 shadow-inner">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
           <div>
-            <p className="text-sm font-semibold text-foreground">AI Intelligence is currently scanning your new document...</p>
-            <p className="text-xs text-muted-foreground mt-1">Updating your profile and ATS score data.</p>
+            <p className="text-base font-bold text-foreground">AI Intelligence is currently scanning your document...</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Extracting metrics and determining your ATS score.</p>
           </div>
         </motion.div>
       )}
 
       {/* ── Stats row ──────────────────────────────────────────────────── */}
-      <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         {stats.map((s) => (
-          <div key={s.label} onClick={s.onClick} className={`p-4 rounded-xl bg-card border border-border shadow-sm flex items-center gap-4 transition-colors ${s.onClick ? 'cursor-pointer hover:border-primary/50' : ''}`}>
-            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-              <s.icon className="w-5 h-5 text-muted-foreground" />
+          <div key={s.label} onClick={s.onClick} className={`p-5 rounded-2xl bg-card border border-border shadow-sm flex items-center gap-5 transition-all duration-300 ${s.onClick ? 'cursor-pointer hover:border-primary/50 hover:shadow-md hover:-translate-y-0.5' : ''}`}>
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-muted border border-border shadow-inner`}>
+              <s.icon className="w-6 h-6 text-foreground/80" />
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">{s.label}</p>
-              <p className="text-xl font-bold text-foreground">{s.value}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{s.label}</p>
+              <p className="text-2xl font-bold tracking-tight text-foreground mt-0.5">{s.value}</p>
             </div>
           </div>
         ))}
       </motion.div>
 
       {/* ── Grid Layout ────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         {/* Left Column: Score & Sub-scores */}
-        <motion.div variants={item} className="lg:col-span-4 space-y-6">
-          <div className="bg-card border border-border shadow-sm rounded-2xl p-6 flex flex-col items-center">
-            <div className="flex items-center justify-between w-full mb-6 relative">
-              <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-muted-foreground" /> ATS Score
+        <motion.div variants={item} className="lg:col-span-4 space-y-8">
+          <div className="bg-card border border-border shadow-sm rounded-2xl p-8 flex flex-col items-center relative overflow-hidden">
+            {/* Subtle top border accent */}
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent"></div>
+            
+            <div className="flex items-center justify-between w-full mb-8">
+              <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-primary" /> ATS Score
               </h2>
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${grade.bgClass} ${grade.colorClass} border-current/20`}>
+              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${grade.bgClass} ${grade.colorClass} border-current/20 shadow-sm`}>
                 {grade.label}
               </span>
             </div>
             
-            <ResumeScoreRing score={resumeScore} size={160} strokeWidth={12} />
+            <ResumeScoreRing score={resumeScore} size={180} strokeWidth={14} />
             
             {critIssue && (
-              <div className="mt-6 w-full p-3.5 rounded-lg bg-destructive/10 border border-destructive/20 flex items-start gap-3">
-                <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-foreground font-medium leading-snug">{critIssue}</p>
+              <div className="mt-8 w-full p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex items-start gap-3 shadow-sm">
+                <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-foreground font-semibold leading-relaxed">{critIssue}</p>
               </div>
             )}
             
             {/* Sub-scores */}
-            <div className="mt-8 w-full space-y-4">
+            <div className="mt-10 w-full space-y-5">
               {[
                 { label: 'Contact Info', score: contactScore },
                 { label: 'Experience Details', score: experienceScore },
@@ -263,16 +268,16 @@ const StudentDashboard = () => {
                 { label: 'Skill Coverage', score: skillCoverageScore },
               ].map((m, i) => (
                 <div key={m.label}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-medium text-muted-foreground">{m.label}</span>
-                    <span className="text-xs font-bold text-foreground">{m.score}%</span>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-foreground">{m.label}</span>
+                    <span className="text-sm font-bold text-foreground">{m.score}%</span>
                   </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div className="h-2.5 bg-muted rounded-full overflow-hidden border border-border/50">
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${m.score}%` }}
                       transition={{ duration: 1, ease: 'easeOut', delay: 0.2 + i * 0.1 }}
-                      className="h-full rounded-full bg-primary"
+                      className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
                     />
                   </div>
                 </div>
@@ -282,61 +287,61 @@ const StudentDashboard = () => {
         </motion.div>
 
         {/* Right Column: Skills, Strengths, Weaknesses, Tips */}
-        <div className="lg:col-span-8 flex flex-col gap-6">
+        <div className="lg:col-span-8 flex flex-col gap-8">
           
           {/* Skills Grid */}
-          <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-                <Search className="w-4 h-4 text-muted-foreground" /> Extracted Technical Skills
+          <motion.div variants={item} className="bg-card border border-border border-l-4 border-l-secondary shadow-sm rounded-2xl p-7">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                <Search className="w-4 h-4 text-secondary" /> Technical Context
               </h2>
-              <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-muted text-foreground">
+              <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-md bg-secondary/10 text-secondary border border-secondary/20 shadow-sm">
                 {displaySkills.length} Detected
               </span>
             </div>
             
             {displaySkills.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2.5">
                 {displaySkills.map((skill) => (
-                  <span key={skill} className="inline-flex items-center text-xs font-medium px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground border border-border">
+                  <span key={skill} className="inline-flex items-center text-sm font-medium px-4 py-2 rounded-lg bg-card text-foreground border border-border shadow-sm hover:border-secondary transition-colors">
                     {skill}
                   </span>
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed border-border rounded-xl">
-                <p className="text-sm font-medium text-foreground">No technical skills detected</p>
-                <p className="text-xs text-muted-foreground mt-1">Ensure your resume contains recognizable industry keywords.</p>
+              <div className="flex flex-col items-center justify-center py-10 text-center border-2 border-dashed border-border rounded-xl bg-muted/10">
+                <p className="text-base font-semibold text-foreground">No technical skills detected</p>
+                <p className="text-sm text-muted-foreground mt-1">Ensure your resume contains recognizable industry keywords.</p>
               </div>
             )}
           </motion.div>
 
           {/* Audit Layout: Strengths & Weaknesses side-by-side */}
           {(strengths.length > 0 || weakAreas.length > 0) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-6">
-                <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-7">
+                <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-5 flex items-center gap-2 pb-3 border-b border-border/50">
                   <CheckCircle2 className="w-4 h-4 text-success" /> Key Strengths
                 </h2>
-                <ul className="space-y-3">
+                <ul className="space-y-4">
                   {strengths.map((s, i) => (
-                    <li key={i} className="flex items-start gap-3 text-sm text-muted-foreground leading-relaxed">
-                      <span className="w-1.5 h-1.5 rounded-full bg-success flex-shrink-0 mt-2" />
-                      <span className="text-foreground">{s}</span>
+                    <li key={i} className="flex items-start gap-3 text-sm text-foreground font-medium leading-relaxed">
+                      <span className="w-2 h-2 rounded-full bg-success flex-shrink-0 mt-1.5 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                      <span>{s}</span>
                     </li>
                   ))}
                 </ul>
               </motion.div>
 
-              <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-6">
-                <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
-                  <XCircle className="w-4 h-4 text-destructive" /> Areas for Improvement
+              <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-7">
+                <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-5 flex items-center gap-2 pb-3 border-b border-border/50">
+                  <XCircle className="w-4 h-4 text-destructive" /> Areas to Improve
                 </h2>
-                <ul className="space-y-3">
+                <ul className="space-y-4">
                   {weakAreas.map((w, i) => (
-                    <li key={i} className="flex items-start gap-3 text-sm text-muted-foreground leading-relaxed">
-                      <span className="w-1.5 h-1.5 rounded-full bg-destructive flex-shrink-0 mt-2" />
-                      <span className="text-foreground">{w}</span>
+                    <li key={i} className="flex items-start gap-3 text-sm text-foreground font-medium leading-relaxed">
+                      <span className="w-2 h-2 rounded-full bg-destructive flex-shrink-0 mt-1.5 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+                      <span>{w}</span>
                     </li>
                   ))}
                 </ul>
@@ -346,17 +351,18 @@ const StudentDashboard = () => {
 
           {/* Actionable Tips */}
           {tips.length > 0 && (
-            <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-6">
-              <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
-                <Lightbulb className="w-4 h-4 text-warning" /> Actionable AI Recommendations
+            <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-7 relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-1 h-full bg-warning"></div>
+              <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-5 flex items-center gap-2">
+                <Lightbulb className="w-4 h-4 text-warning" /> Actionable Recommendations
               </h2>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {tips.map((tip, i) => (
-                  <div key={i} className="flex items-start gap-4 p-4 rounded-xl border border-border bg-muted/30">
-                    <div className="w-6 h-6 rounded-md bg-background border border-border flex items-center justify-center flex-shrink-0 text-xs font-bold text-foreground">
+                  <div key={i} className="flex items-start gap-4 p-5 rounded-xl border border-border bg-muted/20 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="w-7 h-7 rounded-lg bg-card border border-border shadow-sm flex items-center justify-center flex-shrink-0 text-xs font-bold text-foreground">
                       {i + 1}
                     </div>
-                    <p className="text-sm text-foreground leading-relaxed pt-0.5">{tip}</p>
+                    <p className="text-sm font-medium text-foreground leading-relaxed pt-0.5">{tip}</p>
                   </div>
                 ))}
               </div>
@@ -365,15 +371,15 @@ const StudentDashboard = () => {
 
           {/* Resume Preview */}
           {resumeUrl && (
-            <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-muted-foreground" /> Document Preview
+            <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-7">
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary" /> Document Preview
                 </h2>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-4">
                   <button
                     onClick={() => setShowPreview(v => !v)}
-                    className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors underline-offset-4 hover:underline"
+                    className="text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-primary transition-colors hover:bg-primary/5 px-3 py-1.5 rounded-md"
                   >
                     {showPreview ? 'Collapse Preview' : 'Expand Preview'}
                   </button>
@@ -381,9 +387,9 @@ const StudentDashboard = () => {
                     href={resumeUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+                    className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/90 transition-colors shadow-sm"
                   >
-                    <ExternalLink className="w-3.5 h-3.5" /> Open PDF
+                    <ExternalLink className="w-4 h-4" /> Open PDF
                   </a>
                 </div>
               </div>
@@ -396,7 +402,7 @@ const StudentDashboard = () => {
                     exit={{ opacity: 0, height: 0 }}
                     className="overflow-hidden"
                   >
-                    <div className="rounded-xl overflow-hidden border border-border bg-muted h-[600px] mt-2">
+                    <div className="rounded-xl overflow-hidden border border-border bg-muted h-[650px] mt-4 shadow-inner">
                       <iframe src={`${resumeUrl}#toolbar=0`} className="w-full h-full border-none" title="Resume Document" />
                     </div>
                   </motion.div>

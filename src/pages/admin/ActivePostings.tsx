@@ -13,8 +13,10 @@ const item = {
 };
 
 const ActivePostings = () => {
-  const { jobs, applications, deleteJob } = useApp();
+  const { jobs, applications, deleteJob, user } = useApp();
   const [selectedJob, setSelectedJob] = useState<typeof jobs[0] | null>(null);
+
+  const myJobs = jobs.filter(j => j.created_by === user?.id || !j.created_by);
 
   return (
     <div className="space-y-8">
@@ -83,11 +85,13 @@ const ActivePostings = () => {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="elevated-card p-4">
                       <p className="text-xs text-muted-foreground mb-1">Salary Range</p>
-                      <p className="text-sm font-semibold">$80k – $120k</p>
+                      <p className="text-sm font-semibold">
+                        {selectedJob.salary_min ? `$${(selectedJob.salary_min/1000).toFixed(0)}k – $${(selectedJob.salary_max!/1000).toFixed(0)}k` : 'Not specified'}
+                      </p>
                     </div>
                     <div className="elevated-card p-4">
                       <p className="text-xs text-muted-foreground mb-1">Location</p>
-                      <p className="text-sm font-semibold">Remote</p>
+                      <p className="text-sm font-semibold">{selectedJob.location || 'Remote'}</p>
                     </div>
                   </div>
 
@@ -149,7 +153,7 @@ const ActivePostings = () => {
             animate="show"
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
           >
-            {jobs.map((job) => {
+            {myJobs.map((job) => {
               const jobApps = applications.filter(a => a.jobId === job.id);
               return (
                 <motion.div
@@ -190,7 +194,7 @@ const ActivePostings = () => {
                 </motion.div>
               );
             })}
-            {jobs.length === 0 && (
+            {myJobs.length === 0 && (
               <div className="col-span-full elevated-card p-12 text-center">
                 <Briefcase className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                 <p className="text-muted-foreground">No active postings</p>
