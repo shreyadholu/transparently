@@ -1,18 +1,19 @@
 import { motion } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
 import { useNavigate } from 'react-router-dom';
-import { Users, Briefcase, BarChart3, Building2, Sparkles, ArrowRight, Loader2 } from 'lucide-react';
+import { Users, Briefcase, BarChart3, Building2, Sparkles, ArrowRight, CheckCircle2, XCircle, Clock, TrendingUp } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { RecruiterAnalytics } from '@/components/AnalyticsCharts';
-import { supabase } from '@/lib/supabase';
+import { StatusBadge } from '@/components/StatusBadge';
+import { CardSkeleton } from '@/components/LoadingSkeleton';
 
 const container = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.1 } },
+  show: { opacity: 1, transition: { staggerChildren: 0.06 } },
 };
 const item = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  show: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring' as const, stiffness: 100 } },
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 150, damping: 20 } },
 };
 
 const AnimatedNumber = ({ value }: { value: number }) => {
@@ -32,94 +33,117 @@ const AnimatedNumber = ({ value }: { value: number }) => {
 };
 
 const AdminOverview = () => {
-  const { applications, jobs, user } = useApp();
+  const { applications, jobs, user, isSyncing } = useApp();
   const navigate = useNavigate();
 
-  // Filter jobs to ONLY those created by the current user (recruiter)
   const myJobs = jobs.filter(j => j.created_by === user?.id || !j.created_by);
-  // Filter applications to only those that apply to my jobs
   const myJobsIds = myJobs.map(j => j.id);
   const myApps = applications.filter(a => myJobsIds.includes(a.jobId));
 
   const stats = {
-    totalApplications: myApps.length,
-    selectedCount: myApps.filter(a => a.status === 'selected' || a.status === 'approved').length,
-    rejectedCount: myApps.filter(a => a.status === 'rejected').length,
-    pendingCount: myApps.filter(a => a.status === 'pending' || a.status === 'under_review').length
+    total: myApps.length,
+    selected: myApps.filter(a => a.status === 'selected' || a.status === 'approved').length,
+    rejected: myApps.filter(a => a.status === 'rejected').length,
+    inProcess: myApps.filter(a => ['applied', 'screened', 'shortlisted', 'interview'].includes(a.status)).length,
   };
 
+  const avgScore = myApps.length > 0
+    ? Math.round(myApps.reduce((sum, a) => sum + (a.resumeScore || 0), 0) / myApps.length)
+    : 0;
+
+  const selectionRate = myApps.length > 0
+    ? Math.round((stats.selected / myApps.length) * 100)
+    : 0;
+
   const statCards = [
-    { icon: Users, label: 'Total Applicants', value: stats.totalApplications, gradient: 'from-primary to-primary/60', onClick: () => navigate('/admin/applicants') },
-    { icon: Briefcase, label: 'Active Postings', value: myJobs.length, gradient: 'from-accent to-accent/60', onClick: () => navigate('/admin/jobs') },
-    { icon: BarChart3, label: 'Pending Review', value: stats.pendingCount, gradient: 'from-warning to-warning/60', onClick: () => navigate('/admin/applicants') },
+    { icon: Users, label: 'Total Applicants', value: stats.total, accent: 'text-primary bg-primary/10 border-primary/20', onClick: () => navigate('/admin/applicants') },
+    { icon: CheckCircle2, label: 'Selected', value: stats.selected, accent: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', onClick: () => navigate('/admin/applicants') },
+    { icon: XCircle, label: 'Rejected', value: stats.rejected, accent: 'text-red-400 bg-red-500/10 border-red-500/20', onClick: () => navigate('/admin/applicants') },
+    { icon: Clock, label: 'In Process', value: stats.inProcess, accent: 'text-amber-400 bg-amber-500/10 border-amber-500/20', onClick: () => navigate('/admin/applicants') },
   ];
+
+  if (isSyncing) {
+    return (
+      <div className="space-y-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => <CardSkeleton key={i} />)}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
       {/* Company Header */}
-      <motion.div variants={item} className="elevated-card p-6 flex items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+      <motion.div variants={item} className="bg-card border border-border rounded-2xl p-6 flex items-center gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center border border-border">
           <Building2 className="w-7 h-7 text-primary" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold flex items-center gap-2">
             Transparently <Sparkles className="w-5 h-5 text-primary" />
           </h1>
-          <p className="text-muted-foreground text-sm">Company Recruitment Dashboard</p>
+          <p className="text-muted-foreground text-sm">Recruitment Dashboard</p>
+        </div>
+        <div className="hidden sm:flex items-center gap-6">
+          <div className="text-center">
+            <p className="text-xl font-bold text-primary">{avgScore}%</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Avg Score</p>
+          </div>
+          <div className="text-center">
+            <p className="text-xl font-bold text-emerald-400">{selectionRate}%</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Selection Rate</p>
+          </div>
         </div>
       </motion.div>
 
-      {/* Bento Grid Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+      {/* Stats Grid — 4 cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {statCards.map((s) => (
           <motion.div
             key={s.label}
             variants={item}
-            whileHover={{ scale: 1.02, y: -4 }}
+            whileHover={{ y: -3, scale: 1.01 }}
             onClick={s.onClick}
-            className="elevated-card p-6 cursor-pointer group"
+            className="bg-card border border-border rounded-2xl p-5 cursor-pointer group hover:shadow-md transition-all"
           >
-            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${s.gradient} flex items-center justify-center mb-4 opacity-80 group-hover:opacity-100 transition-opacity`}>
-              <s.icon className="w-5 h-5 text-foreground" />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 border ${s.accent}`}>
+              <s.icon className="w-5 h-5" />
             </div>
-              <>
-                <p className="text-3xl font-bold mb-1 animate-count-up"><AnimatedNumber value={s.value} /></p>
-                <p className="section-header">{s.label}</p>
-              </>
-            </motion.div>
+            <p className="text-3xl font-bold mb-0.5"><AnimatedNumber value={s.value} /></p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{s.label}</p>
+          </motion.div>
         ))}
       </div>
 
-
-
       {/* Active Postings */}
       <motion.div variants={item}>
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="section-header text-sm flex items-center gap-2">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
             <Briefcase className="w-4 h-4 text-accent" /> Active Postings
           </h2>
-          {jobs.length > 6 && (
-            <button onClick={() => navigate('/admin/jobs')} className="btn-view-more">
-              View More <ArrowRight className="w-3.5 h-3.5" />
+          {myJobs.length > 6 && (
+            <button onClick={() => navigate('/admin/jobs')} className="btn-view-more text-xs">
+              View All <ArrowRight className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {myJobs.slice(0, 6).map((job, i) => {
             const jobApps = applications.filter(a => a.jobId === job.id);
             return (
               <motion.div
                 key={job.id}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
-                whileHover={{ y: -4, scale: 1.01 }}
+                whileHover={{ y: -3 }}
                 onClick={() => navigate('/admin/active-postings')}
-                className="elevated-card p-5 cursor-pointer"
+                className="bg-card border border-border rounded-xl p-5 cursor-pointer hover:border-primary/30 hover:shadow-sm transition-all"
               >
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
-                    <Briefcase className="w-5 h-5 text-accent" />
+                  <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center border border-accent/20">
+                    <Briefcase className="w-4 h-4 text-accent" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm truncate">{job.title}</p>
@@ -128,13 +152,13 @@ const AdminOverview = () => {
                 </div>
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   {job.skills.slice(0, 3).map(s => (
-                    <span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent" style={{ border: '1px solid hsl(187 92% 41% / 0.15)' }}>{s}</span>
+                    <span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20">{s}</span>
                   ))}
                   {job.skills.length > 3 && <span className="text-[10px] text-muted-foreground">+{job.skills.length - 3}</span>}
                 </div>
-                <div className="flex items-center justify-between text-xs text-muted-foreground pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border/50">
                   <span>{jobApps.length} applicant{jobApps.length !== 1 ? 's' : ''}</span>
-                  <span className="text-primary font-medium">{jobApps.filter(a => a.status === 'pending').length} pending</span>
+                  <span className="text-amber-400 font-medium">{jobApps.filter(a => ['applied', 'screened'].includes(a.status)).length} pending</span>
                 </div>
               </motion.div>
             );
@@ -143,36 +167,33 @@ const AdminOverview = () => {
       </motion.div>
 
       {/* Recent Applications */}
-      <motion.div variants={item} className="elevated-card p-6">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="section-header text-sm">Recent Applications</h2>
-          {myApps.length > 3 && (
-            <button onClick={() => navigate('/admin/applicants')} className="btn-view-more">
-              View More <ArrowRight className="w-3.5 h-3.5" />
+      <motion.div variants={item} className="bg-card border border-border rounded-2xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Recent Applications</h2>
+          {myApps.length > 5 && (
+            <button onClick={() => navigate('/admin/applicants')} className="btn-view-more text-xs">
+              View All <ArrowRight className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
         {myApps.length === 0 ? (
-          <p className="text-muted-foreground text-sm py-4 text-center">No applications yet</p>
+          <div className="text-center py-8">
+            <Users className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+            <p className="text-muted-foreground text-sm">No applications yet</p>
+          </div>
         ) : (
-          <div className="space-y-3">
-            {myApps.slice(0, 3).map((app) => {
+          <div className="space-y-2">
+            {myApps.slice(0, 5).map((app) => {
               const job = jobs.find(j => j.id === app.jobId);
               return (
-                <div key={app.id} className="flex items-center justify-between p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div>
-                    <p className="text-sm font-medium">{app.studentName}</p>
-                    <p className="text-xs text-muted-foreground">{job?.title} at {job?.company}</p>
+                <div key={app.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/10 border border-border/50 hover:bg-muted/20 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{app.studentName}</p>
+                    <p className="text-xs text-muted-foreground truncate">{job?.title} at {job?.company}</p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-mono text-primary">{app.resumeScore}%</span>
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                      app.status === 'approved' || app.status === 'selected' ? 'bg-success/10 text-success' :
-                      app.status === 'rejected' ? 'bg-destructive/10 text-destructive' :
-                      'bg-warning/10 text-warning'
-                    }`}>
-                      {app.status}
-                    </span>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className="text-xs font-mono font-bold text-primary">{app.resumeScore}%</span>
+                    <StatusBadge status={app.status} />
                   </div>
                 </div>
               );
@@ -183,8 +204,8 @@ const AdminOverview = () => {
 
       {/* Analytics Charts */}
       <motion.div variants={item}>
-        <h2 className="section-header text-sm mb-5 flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-primary" /> Dashboard Analytics
+        <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-primary" /> Analytics
         </h2>
         <RecruiterAnalytics />
       </motion.div>
@@ -193,4 +214,3 @@ const AdminOverview = () => {
 };
 
 export default AdminOverview;
-

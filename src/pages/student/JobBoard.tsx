@@ -103,7 +103,7 @@ const JobBoard = () => {
         {
           job_id: selectedJob.id,
           student_id: user.id,
-          status: "under_review",
+          status: "applied",
           score: calculatedScore
         }
       ]).select();

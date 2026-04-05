@@ -1,53 +1,83 @@
 import { motion } from 'framer-motion';
-import { Check, Clock, FileText, Users, Award, XCircle } from 'lucide-react';
-
-export type ApplicationStatus = 'applied' | 'screened' | 'shortlisted' | 'interview' | 'selected' | 'rejected';
+import { Check, Clock, FileText, Users, Award, XCircle, Send, FileSearch } from 'lucide-react';
 
 interface ApplicationTimelineProps {
-  currentStatus: 'pending' | 'approved' | 'rejected' | 'selected' | 'under_review';
+  currentStatus: string;
   appliedAt?: string;
+  compact?: boolean;
 }
 
-const stages: { key: ApplicationStatus; label: string; icon: React.ElementType }[] = [
-  { key: 'applied', label: 'Applied', icon: FileText },
-  { key: 'screened', label: 'Resume Screened', icon: FileText },
-  { key: 'shortlisted', label: 'Shortlisted', icon: Users },
-  { key: 'interview', label: 'Interview', icon: Users },
-  { key: 'selected', label: 'Selected', icon: Award },
+const stages = [
+  { key: 'applied',     label: 'Applied',         icon: Send },
+  { key: 'screened',    label: 'Resume Screened',  icon: FileSearch },
+  { key: 'shortlisted', label: 'Shortlisted',     icon: Users },
+  { key: 'interview',   label: 'Interview',       icon: Users },
+  { key: 'selected',    label: 'Selected',        icon: Award },
 ];
 
-const getStageIndex = (status: string): number => {
-  if (status === 'rejected') return -1;
-  if (status === 'approved' || status === 'selected') return 4; // All stages completed
-  if (status === 'under_review') return 2; // After shortlisted
-  return 1; // Pending = after screened
-};
+function getStageIndex(status: string): number {
+  const map: Record<string, number> = {
+    applied: 0,
+    screened: 1,
+    under_review: 1,
+    pending: 0,
+    shortlisted: 2,
+    interview: 3,
+    selected: 4,
+    approved: 4,
+    rejected: -1,
+  };
+  return map[status] ?? 0;
+}
 
-export function ApplicationTimeline({ currentStatus, appliedAt }: ApplicationTimelineProps) {
+export function ApplicationTimeline({ currentStatus, appliedAt, compact = false }: ApplicationTimelineProps) {
   const currentIndex = getStageIndex(currentStatus);
   const isRejected = currentStatus === 'rejected';
+
+  if (compact) {
+    return (
+      <div className="flex items-center gap-1.5">
+        {stages.map((stage, index) => {
+          const isCompleted = !isRejected && index <= currentIndex;
+          const isRejectedHere = isRejected && index === Math.max(currentIndex, 1);
+          return (
+            <div key={stage.key} className="flex items-center gap-1.5">
+              <div className={`w-2 h-2 rounded-full transition-all ${
+                isRejectedHere ? 'bg-destructive' :
+                isCompleted ? 'bg-primary' : 'bg-muted-foreground/30'
+              }`} />
+              {index < stages.length - 1 && (
+                <div className={`w-4 h-0.5 rounded-full ${
+                  !isRejected && index < currentIndex ? 'bg-primary' : 'bg-muted-foreground/20'
+                }`} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div className="w-full">
       <div className="flex items-center justify-between relative">
         {/* Progress Line Background */}
         <div className="absolute top-5 left-0 right-0 h-0.5 bg-muted" />
-        
+
         {/* Progress Line Fill */}
-        {!isRejected && (
-          <motion.div 
+        {!isRejected && currentIndex >= 0 && (
+          <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${(currentIndex / (stages.length - 1)) * 100}%` }}
             transition={{ duration: 1, ease: 'easeOut' }}
             className="absolute top-5 left-0 h-0.5 bg-gradient-to-r from-primary to-accent"
-            style={{ right: `${100 - (currentIndex / (stages.length - 1)) * 100}%` }}
           />
         )}
 
         {stages.map((stage, index) => {
           const isCompleted = !isRejected && index <= currentIndex;
           const isCurrent = !isRejected && index === currentIndex;
-          const isRejectedStage = isRejected && index === Math.floor(stages.length / 2);
+          const isRejectedStage = isRejected && index === Math.max(currentIndex, 1);
 
           return (
             <div key={stage.key} className="flex flex-col items-center relative z-10">
@@ -79,7 +109,7 @@ export function ApplicationTimeline({ currentStatus, appliedAt }: ApplicationTim
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 + 0.2 }}
-                className={`mt-2 text-xs font-medium ${
+                className={`mt-2 text-xs font-medium text-center max-w-[70px] leading-tight ${
                   isRejectedStage
                     ? 'text-destructive'
                     : isCompleted
@@ -87,7 +117,7 @@ export function ApplicationTimeline({ currentStatus, appliedAt }: ApplicationTim
                     : 'text-muted-foreground'
                 }`}
               >
-                {stage.label}
+                {isRejectedStage ? 'Rejected' : stage.label}
               </motion.span>
             </div>
           );
@@ -96,10 +126,10 @@ export function ApplicationTimeline({ currentStatus, appliedAt }: ApplicationTim
 
       {appliedAt && (
         <p className="text-center text-xs text-muted-foreground mt-4">
-          Applied on {new Date(appliedAt).toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric', 
-            year: 'numeric' 
+          Applied on {new Date(appliedAt).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
           })}
         </p>
       )}
@@ -108,4 +138,3 @@ export function ApplicationTimeline({ currentStatus, appliedAt }: ApplicationTim
 }
 
 export default ApplicationTimeline;
-
