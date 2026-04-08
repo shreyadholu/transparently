@@ -126,12 +126,12 @@ const ActivePostings = () => {
                         </div>
                         <div className="grid grid-cols-3 gap-3">
                           <div className="text-center p-3 rounded-lg bg-muted/30">
-                            <p className="text-lg font-bold text-warning">{jobApps.filter(a => a.status === 'pending').length}</p>
+                            <p className="text-lg font-bold text-warning">{jobApps.filter(a => ['applied', 'screened'].includes(a.status)).length}</p>
                             <p className="text-[10px] text-muted-foreground">Pending</p>
                           </div>
                           <div className="text-center p-3 rounded-lg bg-muted/30">
-                            <p className="text-lg font-bold text-success">{jobApps.filter(a => a.status === 'approved').length}</p>
-                            <p className="text-[10px] text-muted-foreground">Approved</p>
+                            <p className="text-lg font-bold text-success">{jobApps.filter(a => a.status === 'selected').length}</p>
+                            <p className="text-[10px] text-muted-foreground">Selected</p>
                           </div>
                           <div className="text-center p-3 rounded-lg bg-muted/30">
                             <p className="text-lg font-bold text-destructive">{jobApps.filter(a => a.status === 'rejected').length}</p>
@@ -189,7 +189,7 @@ const ActivePostings = () => {
                   </div>
                   <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border/30">
                     <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {jobApps.length} applicants</span>
-                    <span className="text-primary font-medium">{jobApps.filter(a => a.status === 'pending').length} pending</span>
+                    <span className="text-primary font-medium">{jobApps.filter(a => ['applied', 'screened'].includes(a.status)).length} pending</span>
                   </div>
                 </motion.div>
               );

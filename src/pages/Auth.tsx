@@ -25,7 +25,7 @@ const Auth = () => {
       .single();
 
     if (error || !data) {
-      alert("Invalid login credentials");
+      alert("Wrong password or name");
       return;
     }
 

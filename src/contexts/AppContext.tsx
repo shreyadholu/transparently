@@ -45,6 +45,18 @@ export interface Application {
   appliedAt: string;
 }
 
+export interface RoadmapStep {
+  title: string;
+  description: string;
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+}
+
+export interface GrowthRoadmap {
+  steps: RoadmapStep[];
+  estimated_time: string;
+  project_idea: string;
+}
+
 export interface FeedbackData {
   skillGaps: string[];
   formatScore: number;
@@ -52,6 +64,7 @@ export interface FeedbackData {
   overallScore: number;
   suggestions: string[];
   rejectionReasons?: string[];
+  growthRoadmap?: GrowthRoadmap;
 }
 
 // ─── Persisted dashboard data fetched from Supabase ─────────────────────────
@@ -66,6 +79,9 @@ export interface ResumeProfileData {
   weak_areas: string[] | null;
   improvement_tips: string[] | null;
   critical_issue: string | null;
+  degree: string | null;
+  university: string | null;
+  skills: string[] | null;
 }
 
 export interface RecruiterNote {
@@ -105,29 +121,57 @@ interface AppState {
   syncApplicationsFromSupabase: () => Promise<void>;
   addRecruiterNote: (candidateId: string, applicationId: string, note: string) => Promise<void>;
   fetchRecruiterNotes: (applicationId: string) => Promise<RecruiterNote[]>;
+  updateEducation: (degree: string, university: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AppContext = createContext<AppState | null>(null);
 
-// ─── Helper: compute ATS feedback ────────────────────────────────────────────
-function generateFeedback(studentSkills: string[], jobSkills: string[]): FeedbackData {
-  const matchedSkills = studentSkills.filter(s => jobSkills.some(js => js.toLowerCase() === s.toLowerCase()));
-  const skillGaps = jobSkills.filter(js => !studentSkills.some(s => s.toLowerCase() === js.toLowerCase()));
-  const keywordScore = Math.round((matchedSkills.length / Math.max(jobSkills.length, 1)) * 100);
+// ─── Helper: compute ATS feedback (now powered by Python Backend) ────────────
+async function generateAIFeedback(studentSkills: string[], job: Job): Promise<FeedbackData> {
+  const matchedSkills = studentSkills.filter(s => job.skills.some(js => js.toLowerCase() === s.toLowerCase()));
+  const skillGaps = job.skills.filter(js => !studentSkills.some(s => s.toLowerCase() === js.toLowerCase()));
+  const keywordScore = Math.round((matchedSkills.length / Math.max(job.skills.length, 1)) * 100);
   const formatScore = Math.floor(Math.random() * 30) + 60;
   const overallScore = Math.round((keywordScore * 0.6 + formatScore * 0.4));
+  
   const suggestions = [
     ...skillGaps.map(s => `Learn ${s} through online courses or projects`),
     overallScore < 70 ? 'Improve resume formatting with action verbs and metrics' : 'Consider adding quantifiable achievements',
     'Build a portfolio project showcasing your skills',
   ].slice(0, 4);
-  return { skillGaps, formatScore, keywordScore, overallScore, suggestions };
+
+  let growthRoadmap: GrowthRoadmap | undefined;
+  try {
+    const response = await fetch('http://localhost:8000/roadmap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        student_skills: studentSkills,
+        job_title: job.title,
+        job_skills: job.skills
+      })
+    });
+    if (response.ok) {
+      growthRoadmap = await response.json();
+    }
+  } catch (err) {
+    console.error('Roadmap generation failed:', err);
+  }
+
+  return { skillGaps, formatScore, keywordScore, overallScore, suggestions, growthRoadmap };
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
-    try { return JSON.parse(localStorage.getItem('transparently_user') || 'null'); } catch { return null; }
+    try {
+      const stored = localStorage.getItem('transparently_user');
+      console.log('📦 Initial user from localStorage:', stored ? 'Found' : 'None');
+      return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+      console.error('Error reading localStorage:', e);
+      return null;
+    }
   });
 
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -167,7 +211,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // 1. Fetch student profile
         const { data: profile, error: profileErr } = await supabase
           .from('student_profiles')
-          .select('resume_url, resume_score, contact_score, experience_score, keyword_score, skill_coverage_score, strengths, weak_areas, improvement_tips, critical_issue')
+          .select('resume_url, resume_score, contact_score, experience_score, keyword_score, skill_coverage_score, strengths, weak_areas, improvement_tips, critical_issue, degree, university, resume_text, skills')
           .eq('user_id', user.id)
           .single();
 
@@ -178,43 +222,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
 
         if (profile && profile.resume_url) {
-          // 2. Fetch skills from database (source of truth)
-          const { data: skillsData, error: skillsErr } = await supabase
-            .from('skills')
-            .select('skill_name')
-            .eq('user_id', user.id);
+          console.log('📄 Profile found, resume score:', profile.resume_score);
 
-          if (cancelled) return;
+          // 2. Fetch skills directly from profile column (new strategy)
+          let skillNames = profile.skills || [];
+          console.log('📊 Skills from profile column:', skillNames.length);
 
-          if (skillsErr) {
-            console.error('❌ Skills fetch error:', skillsErr.message);
-          }
-
-          let skillNames = (skillsData || []).map(s => s.skill_name as string);
-          
-          // Fallback: if skills table is empty but profile has AI data, re-extract from profile
-          if (skillNames.length === 0 && profile.resume_score && profile.resume_score > 0) {
-            console.warn('⚠️ Skills table empty but profile exists — attempting recovery from resume_text');
-            // Try to fetch resume_text and re-extract
-            const { data: fullProfile } = await supabase
-              .from('student_profiles')
-              .select('resume_text')
-              .eq('user_id', user.id)
-              .single();
-            if (fullProfile?.resume_text) {
-              const recovered = extractActualSkills(fullProfile.resume_text);
-              if (recovered.length > 0) {
-                console.log('🔄 Recovered', recovered.length, 'skills from resume_text, re-saving...');
-                skillNames = recovered;
-                // Re-save to skills table
-                const uniqueSkills = [...new Set(recovered.map(s => s.trim()))].filter(Boolean);
-                await supabase.from('skills').delete().eq('user_id', user.id);
-                if (uniqueSkills.length > 0) {
-                  await supabase.from('skills').insert(
-                    uniqueSkills.map(s => ({ user_id: user.id!, skill_name: s }))
-                  );
-                }
-              }
+          // Fallback: if skills are missing but profile exists, re-extract from resume_text
+          if (skillNames.length === 0 && profile.resume_text) {
+            console.warn('⚠️ No skills in profile column — attempting recovery from cached resume_text');
+            const recovered = extractActualSkills(profile.resume_text);
+            if (recovered.length > 0) {
+              console.log('🔄 Recovered', recovered.length, 'skills from resume_text');
+              skillNames = recovered;
             }
           }
 
@@ -223,18 +243,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setResumeProfile(profile as ResumeProfileData);
           setResumeUrl(profile.resume_url);
           setDetectedSkills(skillNames);
-          setUser(prev => prev ? {
-            ...prev,
-            resumeUploaded: true,
-            resumeScore: profile.resume_score || 0,
-            skills: skillNames,
-          } : null);
+          
+          setUser(prev => {
+            if (!prev) return null;
+            console.log('🔄 Final State Update: Setting user.skills to:', skillNames.length, 'items');
+            return {
+              ...prev,
+              resumeUploaded: true,
+              resumeScore: profile.resume_score || 0,
+              skills: skillNames,
+            };
+          });
 
-          console.log('✅ Hydration complete (Skills:', skillNames.length, ')');
+          console.log('✅ Hydration complete for user:', user.name);
         } else {
           setHasProfile(false);
           setDetectedSkills([]);
-          console.log('ℹ️ No profile found — showing upload screen');
+          console.log('ℹ️ No profile found for user:', user.name);
         }
 
         // 4. Sync applications
@@ -256,8 +281,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ─── Auth ────────────────────────────────────────────────────────────────
   const login = (name: string, email: string, role: Role, id?: string) => {
+    console.log('🔑 Login attempt for:', name, 'ID:', id);
     // Set syncing BEFORE setting user to prevent flash
     setIsSyncing(true);
+    // Initially set skills to empty, but hydration will fill them
     setUser({ id, name, email, role, skills: [], resumeScore: 0, resumeUploaded: false });
     // Don't clear analysis state here — it will be hydrated from DB
     setAiAnalysis(null);
@@ -288,14 +315,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const job = jobs.find(j => j.id === jobId);
     if (!job) return;
 
-    const feedback = generateFeedback(user.skills, job.skills);
+    const feedback = await generateAIFeedback(user.skills, job);
 
     // Persist to Supabase with new 'applied' status
     const { data, error } = await supabase.from('applications').insert([{
       job_id: jobId,
       student_id: user.id,
       status: 'applied',
-      score: feedback.overallScore
+      score: feedback.overallScore,
+      feedback: feedback // Critical: Store the generated feedback including roadmap
     }]).select().single();
 
     if (error) {
@@ -364,16 +392,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateSkills = (skills: string[]) => {
     setUser(prev => prev ? { ...prev, skills } : null);
     setDetectedSkills(skills);
-    // Persist to database
+    // Persist directly to student_profiles
     if (user?.id) {
       (async () => {
-        await supabase.from('skills').delete().eq('user_id', user.id!);
-        if (skills.length > 0) {
-          await supabase.from('skills').upsert(
-            skills.map(s => ({ user_id: user.id!, skill_name: s.trim() })),
-            { onConflict: 'user_id,skill_name' }
-          );
-        }
+        const { error } = await supabase
+          .from('student_profiles')
+          .update({ skills })
+          .eq('user_id', user.id!);
+          
+        if (error) console.error('❌ Failed to update skills in profile:', error.message);
+        else console.log('✅ Skills updated in student_profiles');
       })();
     }
   };
@@ -429,29 +457,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return { success: false, error: "This doesn't look like a resume. Please upload a PDF with Education, Experience, Skills, or Projects sections." };
       }
 
-      // STEP 4: AI Analysis (Gemini primary, regex fallback)
+      // STEP 4: AI Analysis via Python FastAPI Backend
       let geminiResult: AIResumeAnalysis | null = null;
       let regexResult: ResumeAnalysisResult | null = null;
 
       try {
-        geminiResult = await analyzeResumeWithAI(resumeText);
-        setAiAnalysis(geminiResult);
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const response = await fetch('http://localhost:8000/analyze', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (response.ok) {
+          geminiResult = await response.json();
+          setAiAnalysis(geminiResult);
+        } else {
+          throw new Error('Python Backend Analysis Failed');
+        }
       } catch (geminiErr) {
-        console.warn('⚠️ Gemini failed, falling back to regex:', geminiErr);
+        console.warn('⚠️ Python Backend failed, falling back to regex:', geminiErr);
+        try {
+          const regexResult = await analyzeResumeStrict(file);
+          setResumeAnalysisResult(regexResult);
+        } catch (regexErr) {
+          console.error('❌ Regex also failed:', regexErr);
+        }
       }
 
-      try {
-        regexResult = await analyzeResumeStrict(file);
-        setResumeAnalysisResult(regexResult);
-      } catch (regexErr) {
-        console.error('❌ Regex also failed:', regexErr);
-      }
-
-      // STEP 5: Extract skills — DEDUPLICATE to prevent unique constraint violations
-      const rawSkills: string[] =
-        (geminiResult?.skills && geminiResult.skills.length > 0)
-          ? geminiResult.skills
-          : extractActualSkills(resumeText);
+      // STEP 5: Extract skills
+      const rawSkills: string[] = (geminiResult?.skills && geminiResult.skills.length > 0)
+        ? geminiResult.skills
+        : extractActualSkills(resumeText);
       
       // Critical: deduplicate by lowercase, keep first occurrence casing
       const seen = new Set<string>();
@@ -487,9 +525,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         weak_areas: geminiResult?.weak_areas ?? [],
         improvement_tips: geminiResult?.feedback.suggestions ?? [],
         critical_issue: geminiResult?.feedback.critical_issue ?? null,
+        degree: null,
+        university: null,
+        skills: extractedSkills,
       };
 
-      const { error: dbError } = await supabase
+      const { data: profileRecord, error: dbError } = await supabase
         .from('student_profiles')
         .upsert(profilePayload, { onConflict: 'user_id' })
         .select();
@@ -498,40 +539,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.error('❌ Profile save error:', dbError);
       } else {
         setHasProfile(true);
-        setResumeProfile(profilePayload as ResumeProfileData);
-      }
-
-      // STEP 7: Persist skills — delete first, then insert deduped skills
-      const { error: deleteErr } = await supabase.from('skills').delete().eq('user_id', userId);
-      if (deleteErr) {
-        console.error('❌ Skills delete error:', deleteErr);
-      }
-
-      if (extractedSkills.length > 0) {
-        const skillRows = extractedSkills.map(skill => ({
-          user_id: userId,
-          skill_name: skill.trim()
-        }));
-        
-        console.log('💾 Saving', skillRows.length, 'skills to DB for user:', userId);
-        
-        const { error: skillInsertError } = await supabase
-          .from('skills')
-          .insert(skillRows);
-
-        if (skillInsertError) {
-          console.error('❌ Skill insert error:', skillInsertError);
-          // Fallback: try one-by-one insert to salvage what we can
-          console.log('🔄 Retrying skills one-by-one...');
-          let savedCount = 0;
-          for (const row of skillRows) {
-            const { error } = await supabase.from('skills').upsert(row, { onConflict: 'user_id,skill_name' });
-            if (!error) savedCount++;
-          }
-          console.log(`✅ Saved ${savedCount}/${skillRows.length} skills via fallback`);
-        } else {
-          console.log('✅ All', skillRows.length, 'skills saved successfully');
-        }
+        setResumeProfile({ ...profilePayload, skills: extractedSkills } as ResumeProfileData);
+        console.log('✅ Profile & Skills saved to student_profiles successfully');
       }
 
       return { success: true };
@@ -583,7 +592,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       if (data) {
-        const mappedApps = data.map((row: any) => {
+        const mappedApps = data.map((row: {
+          id: string;
+          job_id: string;
+          student_id: string;
+          score: number;
+          status: string;
+          created_at: string;
+          users?: { full_name: string; email: string };
+          application_feedback?: { recruiter_notes: string }[];
+        }) => {
           const notes = row.application_feedback?.[0]?.recruiter_notes;
           const rejectionReasons = notes ? notes.split(', ') : undefined;
 
@@ -591,8 +609,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             id: row.id,
             jobId: row.job_id,
             studentId: row.student_id,
-            studentName: (row.users as any)?.full_name || 'Unknown User',
-            studentEmail: (row.users as any)?.email || '',
+            studentName: row.users?.full_name || 'Unknown User',
+            studentEmail: row.users?.email || '',
             studentSkills: [],
             resumeScore: row.score || 0,
             status: row.status as ApplicationStatus,
@@ -635,6 +653,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return (data || []) as RecruiterNote[];
   };
 
+  const updateEducation = async (degree: string, university: string): Promise<{ success: boolean; error?: string }> => {
+    if (!user?.id) return { success: false, error: 'User not logged in' };
+    
+    setResumeProfile(prev => prev ? { ...prev, degree, university } : null);
+
+    const { error } = await supabase
+      .from('student_profiles')
+      .update({ degree, university })
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('Failed to update education:', error.message);
+      return { success: false, error: 'Failed to save education details' };
+    }
+    return { success: true };
+  };
+
   // ─── Context Value ────────────────────────────────────────────────────
   return (
     <AppContext.Provider value={{
@@ -647,7 +682,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateSkills, uploadResume, handleFileUpload,
       clearAnalysis, setDetectedSkills,
       syncJobsFromSupabase, syncApplicationsFromSupabase,
-      addRecruiterNote, fetchRecruiterNotes,
+      addRecruiterNote, fetchRecruiterNotes, updateEducation,
     }}>
       {children}
     </AppContext.Provider>

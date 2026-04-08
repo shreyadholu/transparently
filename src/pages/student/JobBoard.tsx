@@ -335,7 +335,17 @@ const JobBoard = () => {
                         <p className="text-sm text-muted-foreground">{selectedJob.company}</p>
                       </div>
                     </div>
-                    <p className="text-sm text-muted-foreground">{selectedJob.criteria}</p>
+                    
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 text-xs font-medium text-muted-foreground border-y border-border/50 py-3">
+                      {selectedJob.location && (
+                        <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {selectedJob.location}</span>
+                      )}
+                      {selectedJob.salary_min && (
+                        <span className="flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5 text-accent" /> ${selectedJob.salary_min.toLocaleString()} - ${selectedJob.salary_max?.toLocaleString()}</span>
+                      )}
+                    </div>
+
+                    <p className="text-sm text-muted-foreground leading-relaxed">{selectedJob.criteria}</p>
                     <div className="flex flex-wrap gap-2 mt-3">
                       {selectedJob.skills.map((skill) => {
                         // Task 3: Use getJobMatch for deterministic matching with synonym support
@@ -363,6 +373,12 @@ const JobBoard = () => {
                       <div className="flex justify-between text-sm"><span className="text-muted-foreground">Email</span><span className="font-medium">{user?.email}</span></div>
 {/* FIX: Check detectedSkills.length > 0 instead of user?.resumeUploaded */}
                       <div className="flex justify-between text-sm"><span className="text-muted-foreground">Resume</span><span className={`font-medium ${detectedSkills.length > 0 ? 'text-success' : 'text-warning'}`}>{detectedSkills.length > 0 ? 'Uploaded' : 'Not uploaded'}</span></div>
+                      {user?.resumeScore !== undefined && user.resumeScore > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">ATS Base Score</span>
+                          <span className="font-bold text-primary">{user.resumeScore}%</span>
+                        </div>
+                      )}
 {/* FIX: Use detectedSkills from AppContext - show user's detected skills with job matching */}
                       <div className="pt-2">
                         <span className="text-sm text-muted-foreground">Your Skills</span>

@@ -13,11 +13,11 @@ const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { st
 const item = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 200, damping: 20 } } };
 
 const Profile = () => {
-  const { user, detectedSkills, updateSkills, handleFileUpload, isAnalyzing, hasProfile, isSyncing } = useApp();
+  const { user, detectedSkills, updateSkills, handleFileUpload, isAnalyzing, hasProfile, isSyncing, resumeProfile, updateEducation } = useApp();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [education, setEducation] = useState('');
-  const [university, setUniversity] = useState('');
+  const [education, setEducation] = useState(resumeProfile?.degree || '');
+  const [university, setUniversity] = useState(resumeProfile?.university || '');
   const [manualSkillInput, setManualSkillInput] = useState('');
   const [localSkills, setLocalSkills] = useState<string[]>([]);
   const [resumeUrl, setResumeUrl] = useState<string | null>(null);
@@ -30,6 +30,13 @@ const Profile = () => {
   useEffect(() => {
     setLocalSkills(detectedSkills);
   }, [detectedSkills]);
+
+  useEffect(() => {
+    if (resumeProfile) {
+      if (resumeProfile.degree) setEducation(resumeProfile.degree);
+      if (resumeProfile.university) setUniversity(resumeProfile.university);
+    }
+  }, [resumeProfile]);
 
   // Fetch resume URL + education
   useEffect(() => {
@@ -65,6 +72,17 @@ const Profile = () => {
     setSaving(false);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 2000);
+  };
+
+  const [savingEdu, setSavingEdu] = useState(false);
+  const [saveEduSuccess, setSaveEduSuccess] = useState(false);
+
+  const handleSaveEducation = async () => {
+    setSavingEdu(true);
+    await updateEducation(education, university);
+    setSavingEdu(false);
+    setSaveEduSuccess(true);
+    setTimeout(() => setSaveEduSuccess(false), 2000);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -251,9 +269,21 @@ const Profile = () => {
 
       {/* Education Section */}
       <motion.div variants={item} className="bg-card border border-border rounded-2xl p-6">
-        <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2 mb-5">
-          <GraduationCap className="w-4 h-4 text-accent" /> Education
-        </h2>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+            <GraduationCap className="w-4 h-4 text-accent" /> Education
+          </h2>
+          {(education !== (resumeProfile?.degree || '') || university !== (resumeProfile?.university || '')) && (
+            <button
+              onClick={handleSaveEducation}
+              disabled={savingEdu}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {savingEdu ? <Loader2 className="w-4 h-4 animate-spin" /> : saveEduSuccess ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+              {savingEdu ? 'Saving...' : saveEduSuccess ? 'Saved!' : 'Save Changes'}
+            </button>
+          )}
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>

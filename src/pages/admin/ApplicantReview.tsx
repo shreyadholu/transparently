@@ -8,18 +8,17 @@ import { ListSkeleton } from '@/components/LoadingSkeleton';
 import {
   User, CheckCircle2, XCircle, FileText, Search, Shield,
   ArrowLeft, Loader2, Download, Eye, SlidersHorizontal,
-  MessageSquare, Send, ChevronDown, Award, Target
+  MessageSquare, Send, ChevronDown, Award, Target, GraduationCap, TrendingUp, Briefcase, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const REJECTION_REASONS = [
-  'Skill Mismatch',
+  'Skills Gap',
   'Experience Gap',
-  'Missing Keywords',
-  'Formatting Issues',
-  'Location Mismatch',
-  'Overqualified',
-  'Insufficient Education',
+  'Low ATS Match',
+  'Culture Alignment',
+  'Location Conflict',
+  'Education Gap',
 ];
 
 const ApplicantReview = () => {
@@ -32,6 +31,7 @@ const ApplicantReview = () => {
   const [loadingResume, setLoadingResume] = useState(false);
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [candidateSkills, setCandidateSkills] = useState<string[]>([]);
+  const [candidateEducation, setCandidateEducation] = useState<{ degree?: string, university?: string } | null>(null);
 
   // Filters
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -69,25 +69,24 @@ const ApplicantReview = () => {
     setShowRejectMenu(false);
     setResumeUrl(null);
     setCandidateSkills([]);
+    setCandidateEducation(null);
     setLoadingResume(true);
 
     try {
-      // Fetch resume URL
+      // Fetch profile data including skills (using new skills column)
       const { data: profileData } = await supabase
         .from('student_profiles')
-        .select('resume_url')
+        .select('resume_url, degree, university, skills')
         .eq('user_id', app.studentId)
         .single();
 
       if (profileData?.resume_url) setResumeUrl(profileData.resume_url);
-
-      // Fetch candidate skills
-      const { data: skillsData } = await supabase
-        .from('skills')
-        .select('skill_name')
-        .eq('user_id', app.studentId);
-
-      setCandidateSkills((skillsData || []).map(s => s.skill_name as string));
+      if (profileData?.degree || profileData?.university) {
+        setCandidateEducation({ degree: profileData.degree, university: profileData.university });
+      }
+      
+      // Use skills from the profile column directly
+      setCandidateSkills(profileData?.skills || []);
 
       // Fetch notes
       const fetchedNotes = await fetchRecruiterNotes(app.id);
@@ -128,6 +127,7 @@ const ApplicantReview = () => {
     }
 
     try {
+      setSavingNote(true);
       const { error: appError } = await supabase.from('applications').update({ status: 'rejected' }).eq('id', id);
       if (appError) { toast.error('Failed to update status.'); return; }
 
@@ -136,10 +136,17 @@ const ApplicantReview = () => {
         recruiter_notes: rejectionReasons.join(', ')
       }]);
 
-      reviewApplication(id, 'rejected', rejectionReasons);
+      // Update the local state of the selected student
+      setSelected(prev => prev ? { ...prev, status: 'rejected', feedback: { ...prev.feedback, rejectionReasons } } : null);
+      
+      // Update the parent state if necessary through a re-fetch (optional, but good for sync)
+      // fetchApplicants(); 
+      
       setShowRejectMenu(false);
+      setSavingNote(false);
       toast.success('Application declined with feedback.');
     } catch (err) {
+      setSavingNote(false);
       toast.error('An unexpected error occurred.');
       console.error(err);
     }
@@ -199,8 +206,11 @@ const ApplicantReview = () => {
 
         {/* Header */}
         <div className="flex items-center justify-between">
-          <button onClick={() => setSelected(null)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="w-4 h-4" /> Back to Applicants
+          <button onClick={() => setSelected(null)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group">
+            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-all">
+               <ArrowLeft className="w-4 h-4" />
+            </div>
+            Back to Applicants
           </button>
           <div className="flex gap-2">
             {isActionable && (
@@ -226,77 +236,149 @@ const ApplicantReview = () => {
           </div>
         </div>
 
+        {/* Rejection Prominent Banner */}
+        {selected.status === 'rejected' && (
+           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-destructive/10 border border-destructive/20 rounded-2xl p-6 flex items-center justify-between shadow-sm relative overflow-hidden">
+             <div className="absolute top-0 right-0 w-32 h-64 bg-destructive/5 rounded-full -translate-y-16 translate-x-16 rotate-12" />
+             <div className="flex items-center gap-5 relative z-10">
+                <div className="w-14 h-14 rounded-2xl bg-destructive text-white flex items-center justify-center shadow-lg shadow-destructive/20 rotate-3">
+                  <XCircle className="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-destructive uppercase tracking-widest leading-none">Application Declined</h3>
+                  <p className="text-xs font-bold text-destructive/70 mt-2 uppercase tracking-wide opacity-80">This candidate has been removed from the pipeline.</p>
+                </div>
+             </div>
+             <div className="hidden md:flex flex-col items-end relative z-10">
+                <span className="text-[10px] font-black text-destructive uppercase tracking-[0.2em] opacity-40">Decision Persisted</span>
+                <span className="text-sm font-bold text-destructive">Manual Recruiter Action</span>
+             </div>
+           </motion.div>
+        )}
+
         {/* Reject Menu */}
         <AnimatePresence>
           {showRejectMenu && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-              <div className="bg-card border border-destructive/30 rounded-xl p-4 flex gap-4 items-end">
+              <div className="bg-card border border-destructive/30 rounded-xl p-4 flex flex-col md:flex-row md:items-end gap-4">
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-destructive mb-2">Select rejection reasons:</p>
+                  <p className="text-sm font-bold text-destructive mb-3 uppercase tracking-wider flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" /> Select Primary Reasons for Decline:
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {REJECTION_REASONS.map(reason => (
-                      <button key={reason} onClick={() => toggleReason(reason)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                        rejectionReasons.includes(reason) ? 'bg-destructive/20 text-destructive border-destructive/40' : 'bg-muted/30 text-muted-foreground border-border hover:border-destructive/30'
+                      <button key={reason} onClick={() => toggleReason(reason)} className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+                        rejectionReasons.includes(reason) ? 'bg-destructive/10 text-destructive border-destructive/30 shadow-inner' : 'bg-muted/50 text-muted-foreground border-border hover:border-destructive/20'
                       }`}>
                         {reason}
                       </button>
                     ))}
                   </div>
                 </div>
-                <button onClick={() => handleReject(selected.id)} disabled={rejectionReasons.length === 0} className="px-6 py-2 bg-destructive text-destructive-foreground rounded-xl text-sm font-semibold disabled:opacity-40 transition-opacity whitespace-nowrap">
-                  Confirm
+                <button 
+                  onClick={() => handleReject(selected.id)} 
+                  disabled={rejectionReasons.length === 0 || savingNote} 
+                  className="px-8 py-3 bg-destructive text-destructive-foreground rounded-2xl text-sm font-black uppercase tracking-widest shadow-xl shadow-destructive/20 disabled:opacity-30 self-end transition-all active:scale-95"
+                >
+                  {savingNote ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Confirm Decline"}
                 </button>
               </div>
             </motion.div>
+
           )}
         </AnimatePresence>
 
-        {/* Candidate Detail Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left: Info */}
-          <div className="space-y-4">
-            {/* Profile Card */}
-            <div className="bg-card border border-border rounded-xl p-6">
-              <div className="flex items-center gap-4 mb-5">
-                <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-                  <User className="w-7 h-7 text-primary" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold">{selected.studentName}</h2>
-                  <p className="text-sm text-muted-foreground">{selected.studentEmail}</p>
-                </div>
+        {/* 1. Top Header: Personal Info (No Score) */}
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-6 lg:gap-16">
+            {/* Name & Email */}
+            <div className="flex items-center gap-4 min-w-[240px]">
+              <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                <User className="w-7 h-7 text-primary" />
               </div>
-
-              <div className="p-3 bg-muted/20 rounded-lg mb-4">
-                <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider font-semibold">Applied For</p>
-                <p className="font-semibold text-sm text-primary">{job?.title}</p>
-                <p className="text-xs text-muted-foreground">{job?.company}</p>
-              </div>
-
-              {/* ATS Score */}
-              <div>
-                <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider font-semibold">ATS Score</p>
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
-                    <motion.div initial={{ width: 0 }} animate={{ width: `${selected.resumeScore}%` }} className="h-full bg-primary rounded-full" />
-                  </div>
-                  <span className="text-lg font-mono font-bold text-primary">{selected.resumeScore}%</span>
-                </div>
+              <div className="min-w-0">
+                <h2 className="text-xl font-bold truncate leading-tight">{selected.studentName}</h2>
+                <p className="text-sm text-muted-foreground truncate font-medium">{selected.studentEmail}</p>
               </div>
             </div>
 
-            {/* Skills */}
-            <div className="bg-card border border-border rounded-xl p-5">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
-                <Target className="w-3.5 h-3.5 text-secondary" /> Candidate Skills
+            {/* Position */}
+            <div className="flex flex-col gap-1 min-w-[200px] lg:border-l lg:pl-10 border-border/50">
+              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.15em] opacity-50 mb-1">Position Applied</p>
+              <div className="flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-primary shrink-0" />
+                <span className="font-bold text-sm text-foreground/90 truncate">{job?.title}</span>
+              </div>
+              <p className="text-xs text-muted-foreground font-medium truncate pl-6">{job?.company}</p>
+            </div>
+
+            {/* Education */}
+            <div className="flex flex-col gap-1 min-w-[200px] lg:border-l lg:pl-10 border-border/50">
+              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.15em] opacity-50 mb-1">Education</p>
+              <div className="flex items-center gap-2">
+                <GraduationCap className="w-4 h-4 text-accent shrink-0" />
+                <span className="font-bold text-sm text-foreground/90 truncate">
+                  {candidateEducation?.degree || 'No Degree Listed'}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground font-medium truncate pl-6">
+                {candidateEducation?.university || 'No University Listed'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Middle Row: ATS Score (Left) & Skills (Right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* ATS Score (Left - 4 columns) */}
+          <div className="lg:col-span-4 bg-card border border-border rounded-2xl p-6 shadow-sm flex flex-col">
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60 mb-4 flex items-center gap-2">
+              <TrendingUp className="w-3.5 h-3.5 text-primary" /> Profile Match
+            </h3>
+            <div className="flex items-center gap-6 py-2">
+              <div className="relative w-20 h-20 shrink-0">
+                <svg viewBox="0 0 80 80" className="-rotate-90 w-20 h-20">
+                  <circle cx="40" cy="40" r="32" fill="none" stroke="currentColor" strokeWidth="6" className="text-muted/10" />
+                  <motion.circle 
+                    cx="40" cy="40" r="32" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" strokeDasharray={201} 
+                    initial={{ strokeDashoffset: 201 }} 
+                    animate={{ strokeDashoffset: 201 - (selected.resumeScore / 100) * 201 }} 
+                    transition={{ duration: 1.2, ease: 'circOut' }} 
+                    className="text-primary"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-xl font-black text-primary leading-none">{selected.resumeScore}</span>
+                  <span className="text-[9px] font-bold text-primary mt-0.5 opacity-70">%</span>
+                </div>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-foreground leading-tight mb-1">{selected.resumeScore >= 70 ? 'High Compatibility' : selected.resumeScore >= 40 ? 'Moderate Match' : 'Potential Gap'}</p>
+                <p className="text-[11px] text-muted-foreground font-medium leading-relaxed opacity-80">AI-driven assessment of candidate experience vs role requirements.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Skills (Right - 8 columns) */}
+          <div className="lg:col-span-8 bg-card border border-border rounded-2xl overflow-hidden shadow-sm flex flex-col">
+            <div className="px-6 py-3.5 border-b border-border/50 flex items-center justify-between bg-muted/5">
+              <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60 flex items-center gap-2">
+                <Target className="w-3.5 h-3.5 text-secondary" /> Detected Industry Keywords
               </h3>
+              <span className="text-[9px] font-bold bg-secondary/10 text-secondary px-2 py-0.5 rounded-md border border-secondary/20">
+                {candidateSkills.length} Total
+              </span>
+            </div>
+            <div className="p-6">
               {candidateSkills.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-2">
                   {candidateSkills.map(s => {
                     const isMatch = job?.skills.some(js => js.toLowerCase() === s.toLowerCase());
                     return (
-                      <span key={s} className={`text-xs px-2.5 py-1 rounded-lg border font-medium ${
-                        isMatch ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-muted/30 text-muted-foreground border-border'
+                      <span key={s} className={`px-3 py-1.5 rounded-lg border text-[11px] font-bold transition-all ${
+                        isMatch 
+                          ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 shadow-sm' 
+                          : 'bg-muted/30 text-muted-foreground/70 border-border/60'
                       }`}>
                         {s} {isMatch && '✓'}
                       </span>
@@ -304,86 +386,89 @@ const ApplicantReview = () => {
                   })}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">No skills data available</p>
-              )}
-            </div>
-
-            {/* View Resume Button */}
-            <div className="bg-card border border-border rounded-xl p-5">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
-                <FileText className="w-3.5 h-3.5 text-primary" /> Resume
-              </h3>
-              {loadingResume ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Loading...
-                </div>
-              ) : resumeUrl ? (
-                <button
-                  onClick={() => setShowResumeModal(true)}
-                  className="w-full py-3 rounded-xl bg-primary/10 text-primary border border-primary/20 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-primary/20 transition-colors"
-                >
-                  <Eye className="w-4 h-4" /> View Resume
-                </button>
-              ) : (
-                <p className="text-xs text-muted-foreground">No resume uploaded</p>
+                <p className="text-[11px] text-muted-foreground font-medium italic opacity-60">No skills parsed from document.</p>
               )}
             </div>
           </div>
+        </div>
 
-          {/* Right: Notes + Feedback */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Rejection feedback if rejected */}
-            {selected.feedback?.rejectionReasons && (
-              <div className="bg-card border border-destructive/20 rounded-xl p-5">
-                <h3 className="text-sm font-bold text-destructive flex items-center gap-2 mb-3">
-                  <XCircle className="w-4 h-4" /> Rejection Feedback
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {selected.feedback.rejectionReasons.map((r, i) => (
-                    <span key={i} className="px-3 py-1.5 rounded-lg bg-destructive/10 text-destructive text-xs font-semibold border border-destructive/20">{r}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Recruiter Notes */}
-            <div className="bg-card border border-border rounded-xl p-5">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2">
-                <MessageSquare className="w-3.5 h-3.5 text-accent" /> Internal Notes
+        {/* 3. Bottom Row: Feedback (Left) & Resume (Right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Candidate Feedback (Left - 8 columns) */}
+          <div className="lg:col-span-8 bg-card border border-border rounded-2xl overflow-hidden shadow-sm flex flex-col">
+            <div className="px-6 py-3.5 border-b border-border/50 flex items-center justify-between bg-accent/5">
+              <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent flex items-center gap-2">
+                <MessageSquare className="w-3.5 h-3.5 text-accent" /> Recruiter Feedback Portal
               </h3>
-
-              {/* Add note */}
-              <div className="flex gap-2 mb-4">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-accent/10 border border-accent/20">
+                 <Shield className="w-3 h-3 text-accent" />
+                 <span className="text-[9px] font-bold text-accent uppercase tracking-tighter">Shared with Student</span>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="flex gap-2 mb-6">
                 <input
                   value={noteText}
                   onChange={e => setNoteText(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSaveNote()}
-                  placeholder="Add a note about this candidate..."
-                  className="glass-input flex-1 px-4 py-2.5 text-sm focus:outline-none"
+                  placeholder="Type your feedback message here..."
+                  className="glass-input flex-1 px-4 py-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-accent/20 transition-all shadow-inner"
                 />
                 <button
                   onClick={handleSaveNote}
                   disabled={!noteText.trim() || savingNote}
-                  className="px-4 py-2.5 bg-accent text-accent-foreground rounded-xl text-sm font-semibold flex items-center gap-2 disabled:opacity-40 transition-opacity"
+                  className="px-5 py-2.5 bg-accent text-accent-foreground rounded-xl text-sm font-bold flex items-center gap-2 disabled:opacity-40 transition-all shadow-md active:scale-95 group"
                 >
-                  {savingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  <Send className="w-3.5 h-3.5 text-white group-hover:translate-x-0.5 transition-transform" /> <span className="text-white">Post</span>
                 </button>
               </div>
-
-              {/* Notes list */}
-              {notes.length > 0 ? (
-                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                  {notes.map(note => (
-                    <div key={note.id} className="p-3 rounded-lg bg-muted/20 border border-border/50">
-                      <p className="text-sm text-foreground">{note.note}</p>
-                      <p className="text-[10px] text-muted-foreground mt-1.5">
-                        {new Date(note.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </p>
+              <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 custom-scrollbar">
+                {notes.length > 0 ? notes.map(note => (
+                  <div key={note.id} className="p-4 rounded-xl bg-muted/20 border border-border/40 hover:border-accent/20 transition-all">
+                    <p className="text-sm font-medium text-foreground/80 leading-relaxed italic">"{note.note}"</p>
+                    <div className="flex items-center justify-between mt-3 opacity-50">
+                       <span className="text-[9px] font-black uppercase tracking-widest">Global Talent Team</span>
+                       <span className="text-[9px] font-bold uppercase">
+                        {new Date(note.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
                     </div>
-                  ))}
+                  </div>
+                )) : (
+                   <div className="py-12 text-center opacity-30">
+                     <MessageSquare className="w-10 h-10 mx-auto mb-2" />
+                     <p className="text-xs font-bold uppercase tracking-widest">No Feedback Shared Yet</p>
+                   </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Resume Viewer (Right - 4 columns) */}
+          <div className="lg:col-span-4 flex flex-col space-y-4">
+            <div className="bg-gradient-to-br from-primary/5 via-accent/5 to-primary/5 border border-primary/20 rounded-2xl p-6 flex flex-col items-center justify-center text-center flex-1 shadow-sm relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full -translate-y-12 translate-x-12 blur-2xl" />
+              <div className="w-14 h-14 rounded-2xl bg-white flex items-center justify-center border border-primary/10 mb-5 shadow-sm group-hover:scale-110 transition-transform">
+                <FileText className="w-7 h-7 text-primary" />
+              </div>
+              <h4 className="text-base font-bold text-foreground mb-1.5 leading-tight">Professional Resume</h4>
+              <p className="text-[11px] text-muted-foreground font-medium mb-6 leading-relaxed px-2 opacity-80 italic">
+                Verified candidate document. Review for full project history and credentials.
+              </p>
+              {loadingResume ? (
+                <div className="py-4">
+                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
                 </div>
+              ) : resumeUrl ? (
+                <button
+                  onClick={() => setShowResumeModal(true)}
+                  className="w-full py-3.5 rounded-xl bg-primary text-white text-xs font-black flex items-center justify-center gap-2.5 hover:shadow-lg hover:shadow-primary/20 transition-all transform active:scale-95 uppercase tracking-[0.1em]"
+                >
+                  <Eye className="w-4 h-4" /> Open Preview
+                </button>
               ) : (
-                <p className="text-xs text-muted-foreground text-center py-4">No notes yet</p>
+                <div className="py-4 px-4 bg-muted/30 rounded-lg border border-dashed border-border w-full">
+                   <p className="text-[10px] font-bold text-muted-foreground uppercase">File Unattainable</p>
+                </div>
               )}
             </div>
           </div>
@@ -480,31 +565,76 @@ const ApplicantReview = () => {
             <p className="text-muted-foreground text-sm">Candidates who apply to your jobs will appear here.</p>
           </div>
         ) : (
-          filtered.map((app, i) => {
-            const job = jobs.find(j => j.id === app.jobId);
-            return (
-              <motion.button
-                key={app.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.02 }}
-                onClick={() => handleSelectCandidate(app)}
-                className="w-full text-left p-4 rounded-xl bg-card border border-border flex items-center gap-4 group hover:border-primary/30 hover:bg-muted/10 transition-all"
-              >
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-                  <User className="w-5 h-5 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-sm truncate">{app.studentName}</p>
-                  <p className="text-xs text-muted-foreground truncate">{job?.title} · {job?.company}</p>
-                </div>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <span className="text-xs font-mono font-bold text-foreground/70">{app.resumeScore}%</span>
-                  <StatusBadge status={app.status} />
-                </div>
-              </motion.button>
-            );
-          })
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-12">
+            {filtered.map((app, i) => {
+              const job = jobs.find(j => j.id === app.jobId);
+              return (
+                <motion.button
+                  key={app.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  whileHover={{ y: -4, scale: 1.01 }}
+                  onClick={() => handleSelectCandidate(app)}
+                  className="text-left bg-card border border-border shadow-sm rounded-2xl p-6 hover:border-primary/40 hover:shadow-md transition-all group relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 p-3">
+                    <StatusBadge status={app.status} size="sm" />
+                  </div>
+
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all duration-300 transform group-hover:rotate-3 shadow-inner">
+                      <User className="w-7 h-7" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-bold text-lg text-foreground group-hover:text-primary transition-colors truncate">
+                        {app.studentName}
+                      </h3>
+                      <p className="text-xs text-muted-foreground truncate font-semibold uppercase tracking-wider opacity-70">
+                        {app.studentEmail}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="p-3 rounded-xl bg-muted/30 border border-border/50">
+                      <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5 opacity-60">
+                         Applied For
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-foreground/90 font-bold truncate">
+                        <Briefcase className="w-4 h-4 text-primary" />
+                        {job?.title || 'Unknown Position'}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4 py-1">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.15em] opacity-40">Match Score</span>
+                          <span className="text-sm font-black text-primary">{app.resumeScore}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden border border-border/30">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${app.resumeScore}%` }}
+                            className="h-full bg-primary"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end">
+                         <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.15em] opacity-40 mb-1">Applied</span>
+                         <span className="text-[10px] font-bold text-foreground/70">{new Date(app.appliedAt).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 pt-5 border-t border-dashed border-border/50 flex items-center justify-center w-full py-2 bg-primary/5 rounded-xl text-[11px] font-black text-primary uppercase tracking-[0.05em] group-hover:bg-primary group-hover:text-white transition-all duration-300 cursor-pointer">
+                     Review Details
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>

@@ -9,7 +9,7 @@ import { DashboardSkeleton } from '@/components/LoadingSkeleton';
 import {
   FileText, Target, Briefcase, Upload, Shield,
   Search, Loader2, AlertCircle, CheckCircle2, XCircle,
-  Lightbulb, RefreshCw, TrendingUp, Eye
+  Lightbulb, RefreshCw, TrendingUp, Eye, ChevronDown, User
 } from 'lucide-react';
 
 // ─── Animation variants ───────────────────────────────────────────────────────
@@ -32,6 +32,7 @@ const StudentDashboard = () => {
   const [localResumeUrl, setLocalResumeUrl] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [showResumeModal, setShowResumeModal] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
 
   // Fetch resume_url
   useEffect(() => {
@@ -249,142 +250,174 @@ const StudentDashboard = () => {
       {/* ── Grid Layout ────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-        {/* Left Column: Score & Sub-scores */}
-        <motion.div variants={item} className="lg:col-span-4 space-y-6">
-          <div className="bg-card border border-border shadow-sm rounded-2xl p-8 flex flex-col items-center relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent" />
-
-            <div className="flex items-center justify-between w-full mb-6">
-              <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-primary" /> ATS Score
-              </h2>
-              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${grade.bgClass} ${grade.colorClass}`}>
-                {grade.label}
-              </span>
-            </div>
-
-            <ResumeScoreRing score={resumeScore} size={180} strokeWidth={14} />
-
-            {critIssue && (
-              <div className="mt-6 w-full p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-foreground font-semibold leading-relaxed">{critIssue}</p>
-              </div>
-            )}
-
-            {/* Sub-scores */}
-            <div className="mt-8 w-full space-y-4">
-              {[
-                { label: 'Contact Info', score: contactScore },
-                { label: 'Experience', score: experienceScore },
-                { label: 'Keywords', score: keywordScore },
-                { label: 'Skill Coverage', score: skillCoverageScore },
-              ].map((m, i) => (
-                <div key={m.label}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-sm font-medium text-foreground">{m.label}</span>
-                    <span className="text-sm font-bold text-foreground">{m.score}%</span>
+        {/* Main Dashboard Grid */}
+        <div className="lg:col-span-12 space-y-6">
+          
+          {/* ── ATS Insights (Combined Card) ────────────────────────────────── */}
+          <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl overflow-hidden">
+            <div className="p-6 md:p-8 flex flex-col md:flex-row items-center gap-8 md:gap-12 relative">
+               <div className="absolute top-0 left-0 w-1 h-full bg-primary" />
+               
+               {/* Overall Score (Left) */}
+               <div className="flex flex-col items-center shrink-0">
+                  <div className="flex items-center justify-between w-full mb-6 px-2">
+                    <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-primary" /> Overall Score
+                    </h2>
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${grade.bgClass} ${grade.colorClass}`}>
+                      {grade.label}
+                    </span>
                   </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden border border-border/50">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${m.score}%` }}
-                      transition={{ duration: 1, ease: 'easeOut', delay: 0.2 + i * 0.1 }}
-                      className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
-                    />
+                  <ResumeScoreRing score={resumeScore} size={160} strokeWidth={12} />
+                  <div className="mt-4 text-center">
+                    <p className="text-3xl font-bold text-foreground">{resumeScore}%</p>
+                    <p className="text-xs text-muted-foreground font-medium">ATS Match Probability</p>
                   </div>
-                </div>
-              ))}
+               </div>
+
+               {/* Breakdown (Right) */}
+               <div className="flex-1 w-full space-y-5">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4">Metric Breakdown</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
+                    {[
+                      { label: 'Contact Info', score: contactScore, icon: User },
+                      { label: 'Experience', score: experienceScore, icon: Briefcase },
+                      { label: 'Keyword Density', score: keywordScore, icon: Search },
+                      { label: 'Skill Coverage', score: skillCoverageScore, icon: Target },
+                    ].map((m, i) => (
+                      <div key={m.label} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <m.icon className="w-3.5 h-3.5 text-muted-foreground" />
+                            <span className="text-xs font-semibold text-foreground/80">{m.label}</span>
+                          </div>
+                          <span className="text-xs font-bold text-primary">{m.score}%</span>
+                        </div>
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden border border-border/40">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${m.score}%` }}
+                            transition={{ duration: 1, ease: 'easeOut', delay: 0.3 + i * 0.1 }}
+                            className="h-full rounded-full bg-primary"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {critIssue && (
+                    <div className="mt-4 p-3 rounded-xl bg-destructive/5 border border-destructive/20 flex items-start gap-2.5 text-xs">
+                      <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                      <p className="text-foreground/90 font-medium leading-relaxed">
+                        <span className="text-destructive font-bold">Critical:</span> {critIssue}
+                      </p>
+                    </div>
+                  )}
+               </div>
             </div>
-          </div>
-        </motion.div>
-
-        {/* Right Column: Skills, Improvement Plan */}
-        <div className="lg:col-span-8 flex flex-col gap-6">
-
-          {/* Skills Grid */}
-          <motion.div variants={item} className="bg-card border border-border border-l-4 border-l-secondary shadow-sm rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                <Search className="w-4 h-4 text-secondary" /> Detected Skills
-              </h2>
-              <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-md bg-secondary/10 text-secondary border border-secondary/20">
-                {displaySkills.length} Found
-              </span>
-            </div>
-
-            {displaySkills.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {displaySkills.map((skill) => (
-                  <span key={skill} className="inline-flex items-center text-sm font-medium px-3.5 py-1.5 rounded-lg bg-card text-foreground border border-border shadow-sm hover:border-secondary transition-colors">
-                    {skill}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed border-border rounded-xl bg-muted/10">
-                <p className="text-base font-semibold text-foreground">No skills detected</p>
-                <p className="text-sm text-muted-foreground mt-1">Ensure your resume contains recognizable industry keywords.</p>
-              </div>
-            )}
           </motion.div>
 
-          {/* Strengths & Weaknesses side-by-side */}
-          {(strengths.length > 0 || weakAreas.length > 0) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {strengths.length > 0 && (
-                <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-6">
-                  <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2 pb-3 border-b border-border/50">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Strengths
-                  </h2>
-                  <ul className="space-y-3">
-                    {strengths.map((s, i) => (
-                      <li key={i} className="flex items-start gap-3 text-sm text-foreground font-medium leading-relaxed">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0 mt-1.5" />
-                        <span>{s}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </motion.div>
-              )}
-
-              {weakAreas.length > 0 && (
-                <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-6">
-                  <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2 pb-3 border-b border-border/50">
-                    <XCircle className="w-4 h-4 text-red-400" /> Issues Found
-                  </h2>
-                  <ul className="space-y-3">
-                    {weakAreas.map((w, i) => (
-                      <li key={i} className="flex items-start gap-3 text-sm text-foreground font-medium leading-relaxed">
-                        <span className="w-2 h-2 rounded-full bg-red-400 flex-shrink-0 mt-1.5" />
-                        <span>{w}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </motion.div>
-              )}
-            </div>
-          )}
-
-          {/* Improvement Plan — merged "Areas to Improve" + "Actionable Recommendations" */}
-          {tips.length > 0 && (
-            <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-6 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-1 h-full bg-amber-400" />
-              <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2">
-                <Lightbulb className="w-4 h-4 text-amber-400" /> Action Steps
+          {/* ── Feedback Grid (Strengths & Weaknesses) ─────────────────────── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-6 relative overflow-hidden group">
+              <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500/50" />
+              <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-5 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Strengths
               </h2>
-              <div className="space-y-3">
-                {tips.map((tip, i) => (
-                  <div key={i} className="flex items-start gap-3 p-4 rounded-xl border border-border bg-muted/20 hover:shadow-sm transition-shadow">
-                    <div className="w-6 h-6 rounded-lg bg-card border border-border flex items-center justify-center flex-shrink-0 text-xs font-bold text-foreground">
-                      {i + 1}
+              {strengths.length > 0 ? (
+                <ul className="space-y-3.5">
+                  {strengths.map((s, i) => (
+                    <li key={i} className="flex items-start gap-3 text-sm text-foreground/90 font-medium leading-relaxed group-hover:translate-x-1 transition-transform">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 mt-1.5" />
+                      <span>{s}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">Add more details to see strengths.</p>
+              )}
+            </motion.div>
+
+            <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl p-6 relative overflow-hidden group">
+              <div className="absolute top-0 left-0 w-full h-1 bg-red-500/50" />
+              <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-5 flex items-center gap-2">
+                <XCircle className="w-4 h-4 text-red-400" /> Potential Issues
+              </h2>
+              {weakAreas.length > 0 ? (
+                <ul className="space-y-3.5">
+                  {weakAreas.map((w, i) => (
+                    <li key={i} className="flex items-start gap-3 text-sm text-foreground/90 font-medium leading-relaxed group-hover:translate-x-1 transition-transform">
+                      <div className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0 mt-1.5" />
+                      <span>{w}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-emerald-500 text-xs font-semibold">
+                  <CheckCircle2 className="w-4 h-4" /> No major issues detected
+                </div>
+              )}
+            </motion.div>
+          </div>
+
+          {/* ── Action Steps (Distinct Styling) ─────────────────────────────── */}
+          {tips.length > 0 && (
+            <motion.div variants={item} className="p-1 rounded-2xl bg-gradient-to-br from-amber-400/20 to-orange-500/20">
+              <div className="bg-card/80 backdrop-blur-md rounded-xl p-6 border border-amber-400/20">
+                <h2 className="text-sm font-semibold uppercase tracking-widest text-amber-500 mb-5 flex items-center gap-2">
+                  <Lightbulb className="w-4 h-4" /> Recommended Action Steps
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {tips.map((tip, i) => (
+                    <div key={i} className="flex items-start gap-3 p-4 rounded-xl bg-background border border-border hover:border-amber-400/50 transition-all group">
+                      <div className="w-7 h-7 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0 text-xs font-bold text-amber-500 group-hover:bg-amber-400 group-hover:text-white transition-colors">
+                        {i + 1}
+                      </div>
+                      <p className="text-sm font-medium text-foreground/90 leading-relaxed pt-0.5">{tip}</p>
                     </div>
-                    <p className="text-sm font-medium text-foreground leading-relaxed pt-0.5">{tip}</p>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </motion.div>
           )}
+
+          {/* ── Collapsible Detected Skills ─────────────────────────────────── */}
+          <motion.div variants={item} className="bg-card border border-border shadow-sm rounded-2xl overflow-hidden transition-all duration-300">
+            <button 
+              onClick={() => setSkillsOpen(!skillsOpen)}
+              className="w-full flex items-center justify-between p-6 hover:bg-muted/30 transition-colors"
+            >
+              <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                <Search className="w-4 h-4 text-secondary" /> Extracted Industry Skills
+              </h2>
+              <div className="flex items-center gap-4">
+                <span className="text-xs font-bold bg-secondary/10 text-secondary px-2.5 py-1 rounded-lg border border-secondary/20">
+                  {displaySkills.length} Keywords
+                </span>
+                <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform duration-300 ${skillsOpen ? 'rotate-180' : ''}`} />
+              </div>
+            </button>
+            <AnimatePresence>
+              {skillsOpen && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="px-6 pb-8"
+                >
+                  <div className="pt-2 flex flex-wrap gap-2">
+                    {displaySkills.length > 0 ? displaySkills.map((skill) => (
+                      <span key={skill} className="px-3.5 py-1.5 rounded-xl bg-background border border-border text-sm font-medium text-foreground hover:border-secondary hover:text-secondary transition-all cursor-default">
+                        {skill}
+                      </span>
+                    )) : (
+                      <p className="text-sm text-muted-foreground italic py-4">No skills detected. Try re-uploading your resume.</p>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
         </div>
       </div>
     </motion.div>

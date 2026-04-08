@@ -17,6 +17,11 @@ const SignUp = () => {
     e.preventDefault();
     if (!name || !email || !password) return;
 
+    if (password.length < 8) {
+      alert("The password length should be at least 8 characters");
+      return;
+    }
+
     const { error } = await supabase.from("users").insert([
       {
         full_name: name,
