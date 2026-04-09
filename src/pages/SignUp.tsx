@@ -2,14 +2,16 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp, Role } from '@/contexts/AppContext';
-import { User, Shield, Mail, ArrowRight, Sparkles, Lock } from 'lucide-react';
+import { User, Shield, Mail, ArrowRight, Sparkles, Lock, Eye, EyeOff } from 'lucide-react';
 import { supabase } from "../lib/supabase"
+import { toast } from 'sonner';
 
 const SignUp = () => {
   const [role, setRole] = useState<Role>('student');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const { login } = useApp();
   const navigate = useNavigate();
 
@@ -32,9 +34,16 @@ const SignUp = () => {
     ]);
 
     if (error) {
-      console.log(error);
+      console.error('Sign up error:', error);
+      if (error.code === '23505' || error.message?.includes('unique constraint')) {
+        toast.error("An account with this email already exists.");
+      } else {
+        toast.error(error.message || "Sign up failed. Please try again.");
+      }
       return;
     }
+
+    toast.success("Account created successfully! Please sign in.");
 
     navigate("/login");
   };
@@ -167,12 +176,20 @@ const SignUp = () => {
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="glass-input w-full pl-10 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="glass-input w-full pl-10 pr-12 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/50 rounded-lg transition-colors text-muted-foreground"
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
 

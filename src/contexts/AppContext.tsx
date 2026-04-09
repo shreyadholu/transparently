@@ -133,7 +133,7 @@ async function generateAIFeedback(studentSkills: string[], job: Job): Promise<Fe
   const keywordScore = Math.round((matchedSkills.length / Math.max(job.skills.length, 1)) * 100);
   const formatScore = Math.floor(Math.random() * 30) + 60;
   const overallScore = Math.round((keywordScore * 0.6 + formatScore * 0.4));
-  
+
   const suggestions = [
     ...skillGaps.map(s => `Learn ${s} through online courses or projects`),
     overallScore < 70 ? 'Improve resume formatting with action verbs and metrics' : 'Consider adding quantifiable achievements',
@@ -243,7 +243,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setResumeProfile(profile as ResumeProfileData);
           setResumeUrl(profile.resume_url);
           setDetectedSkills(skillNames);
-          
+
           setUser(prev => {
             if (!prev) return null;
             console.log('🔄 Final State Update: Setting user.skills to:', skillNames.length, 'items');
@@ -372,19 +372,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setApplications(prev => prev.map(a =>
       a.id === appId
         ? {
-            ...a,
-            status,
-            feedback: {
-              ...(a.feedback || {
-                skillGaps: [],
-                formatScore: 0,
-                keywordScore: 0,
-                overallScore: a.resumeScore || 0,
-                suggestions: [],
-              }),
-              rejectionReasons: status === 'rejected' ? rejectionReasons : undefined
-            }
+          ...a,
+          status,
+          feedback: {
+            ...(a.feedback || {
+              skillGaps: [],
+              formatScore: 0,
+              keywordScore: 0,
+              overallScore: a.resumeScore || 0,
+              suggestions: [],
+            }),
+            rejectionReasons: status === 'rejected' ? rejectionReasons : undefined
           }
+        }
         : a
     ));
   };
@@ -399,7 +399,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .from('student_profiles')
           .update({ skills })
           .eq('user_id', user.id!);
-          
+
         if (error) console.error('❌ Failed to update skills in profile:', error.message);
         else console.log('✅ Skills updated in student_profiles');
       })();
@@ -449,6 +449,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (resumeText.length < 50) {
         console.warn('⚠️ Very short extracted text — may be image-based PDF');
+      } else {
+        console.log('🤖 [DEBUG] Extracted Text Snippet:', resumeText.slice(0, 500) + '...');
       }
 
       // Authenticity check
@@ -457,29 +459,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return { success: false, error: "This doesn't look like a resume. Please upload a PDF with Education, Experience, Skills, or Projects sections." };
       }
 
-      // STEP 4: AI Analysis via Python FastAPI Backend
+      // STEP 4: AI Analysis (Primary: Gemini TS SDK, Fallback: Regex)
       let geminiResult: AIResumeAnalysis | null = null;
       let regexResult: ResumeAnalysisResult | null = null;
 
       try {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const response = await fetch('http://localhost:8000/analyze', {
-          method: 'POST',
-          body: formData
-        });
-
-        if (response.ok) {
-          geminiResult = await response.json();
-          setAiAnalysis(geminiResult);
-        } else {
-          throw new Error('Python Backend Analysis Failed');
-        }
+        console.log('🤖 [Gemini] Calling TypeScript AI analyzer...');
+        geminiResult = await analyzeResumeWithAI(resumeText);
+        setAiAnalysis(geminiResult);
       } catch (geminiErr) {
-        console.warn('⚠️ Python Backend failed, falling back to regex:', geminiErr);
+        console.warn('⚠️ TypeScript Gemini failed, falling back to regex:', geminiErr);
         try {
-          const regexResult = await analyzeResumeStrict(file);
+          regexResult = await analyzeResumeStrict(file);
           setResumeAnalysisResult(regexResult);
         } catch (regexErr) {
           console.error('❌ Regex also failed:', regexErr);
@@ -490,7 +481,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const rawSkills: string[] = (geminiResult?.skills && geminiResult.skills.length > 0)
         ? geminiResult.skills
         : extractActualSkills(resumeText);
-      
+
       // Critical: deduplicate by lowercase, keep first occurrence casing
       const seen = new Set<string>();
       const extractedSkills = rawSkills.filter(s => {
@@ -655,7 +646,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateEducation = async (degree: string, university: string): Promise<{ success: boolean; error?: string }> => {
     if (!user?.id) return { success: false, error: 'User not logged in' };
-    
+
     setResumeProfile(prev => prev ? { ...prev, degree, university } : null);
 
     const { error } = await supabase

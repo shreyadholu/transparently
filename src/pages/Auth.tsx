@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp, Role } from '@/contexts/AppContext';
-import { User, Shield, ArrowRight, Sparkles } from 'lucide-react';
+import { User, Shield, ArrowRight, Sparkles, Lock, Eye, EyeOff } from 'lucide-react';
 import { supabase } from "../lib/supabase"
+import { toast } from 'sonner';
 
 const Auth = () => {
   const [role, setRole] = useState<Role>('student');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const { login } = useApp();
   const navigate = useNavigate();
 
@@ -19,15 +21,18 @@ const Auth = () => {
     const { data, error } = await supabase
       .from("users")
       .select("*")
-      .eq("full_name", name)
+      .or(`full_name.eq.${name},email.eq.${name}`)
       .eq("password", password)
       .eq("role", role)
       .single();
 
     if (error || !data) {
-      alert("Wrong password or name");
+      console.error('Login error:', error);
+      toast.error("Invalid credentials. Please check your username/email and password.");
       return;
     }
+
+    toast.success(`Welcome back, ${data.full_name}!`);
 
     login(data.full_name, data.email, data.role, data.id);
     navigate(role === 'student' ? '/student' : '/admin');
@@ -129,14 +134,14 @@ const Auth = () => {
               className="space-y-5"
             >
               <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-2">Full Name</label>
+                <label className="block text-sm font-medium text-muted-foreground mb-2">Email or Full Name</label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder={role === 'student' ? 'Jane Doe' : 'Hiring Manager'}
+                    placeholder={role === 'student' ? 'Email or Full Name' : 'Email or Manager Name'}
                     className="glass-input w-full pl-10 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
                 </div>
@@ -145,13 +150,22 @@ const Auth = () => {
               <div>
                 <label className="block text-sm font-medium text-muted-foreground mb-2">Password</label>
                 <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your password"
-                    className="glass-input w-full pl-4 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="glass-input w-full pl-10 pr-12 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/50 rounded-lg transition-colors text-muted-foreground"
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
 
