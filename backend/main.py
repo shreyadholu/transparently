@@ -9,6 +9,7 @@ import google.generativeai as genai
 from PyPDF2 import PdfReader
 from dotenv import load_dotenv
 import io
+#
 
 load_dotenv()
 
