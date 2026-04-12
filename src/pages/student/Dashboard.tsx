@@ -48,6 +48,7 @@ const StudentDashboard = () => {
   }, [user?.id, hasProfile]);
 
   // ─── Derived values ───────────────────────────────────────────────────────
+  // Priority: fresh aiAnalysis → regex result → persisted resumeProfile
   const resumeScore = aiAnalysis?.overall_score ?? resumeAnalysisResult?.resume_health.overall_score ?? resumeProfile?.resume_score ?? 0;
   const contactScore = aiAnalysis?.contact_info_score ?? resumeAnalysisResult?.structural_integrity.contact_info_score ?? resumeProfile?.contact_score ?? 0;
   const experienceScore = aiAnalysis?.experience_score ?? resumeAnalysisResult?.structural_integrity.experience_headers_score ?? resumeProfile?.experience_score ?? 0;
@@ -55,10 +56,27 @@ const StudentDashboard = () => {
   const skillCoverageScore = aiAnalysis?.skill_coverage_score ?? resumeProfile?.skill_coverage_score ?? 0;
 
   const displaySkills = (aiAnalysis?.skills && aiAnalysis.skills.length > 0) ? aiAnalysis.skills : detectedSkills.length > 0 ? detectedSkills : user?.skills ?? [];
-  const strengths = aiAnalysis?.strengths ?? resumeProfile?.strengths ?? [];
-  const weakAreas = aiAnalysis?.weak_areas ?? resumeProfile?.weak_areas ?? [];
-  const tips = aiAnalysis?.feedback.suggestions ?? resumeProfile?.improvement_tips ?? [];
-  const critIssue = aiAnalysis?.feedback.critical_issue ?? resumeProfile?.critical_issue ?? null;
+
+  // Use .length > 0 guards so empty arrays fall through to the next source
+  const strengths: string[] = (aiAnalysis?.strengths && aiAnalysis.strengths.length > 0)
+    ? aiAnalysis.strengths
+    : (Array.isArray(resumeProfile?.strengths) && (resumeProfile!.strengths as string[]).length > 0)
+      ? (resumeProfile!.strengths as string[])
+      : [];
+
+  const weakAreas: string[] = (aiAnalysis?.weak_areas && aiAnalysis.weak_areas.length > 0)
+    ? aiAnalysis.weak_areas
+    : (Array.isArray(resumeProfile?.weak_areas) && (resumeProfile!.weak_areas as string[]).length > 0)
+      ? (resumeProfile!.weak_areas as string[])
+      : [];
+
+  const tips: string[] = (aiAnalysis?.feedback?.suggestions && aiAnalysis.feedback.suggestions.length > 0)
+    ? aiAnalysis.feedback.suggestions
+    : (Array.isArray(resumeProfile?.improvement_tips) && (resumeProfile!.improvement_tips as string[]).length > 0)
+      ? (resumeProfile!.improvement_tips as string[])
+      : [];
+
+  const critIssue = aiAnalysis?.feedback?.critical_issue ?? resumeProfile?.critical_issue ?? null;
   const resumeUrl = localResumeUrl;
 
   const grade = getGrade(resumeScore);

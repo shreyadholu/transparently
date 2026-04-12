@@ -27,10 +27,10 @@ ANALYSIS GUIDELINES:
    - skill_coverage_score: Evaluate breadth across different domains (Frontend, Backend, Data, Cloud).
 
 2. EXTRACTION:
-   - skills: Identify at least 5-10 distinct hard technical skills. Categorize them internally to calculate the coverage score.
-   - strengths: Identify exactly 3 SPECIFIC strengths (e.g., "Exceptional use of action verbs", "Strong emphasis on cloud-native architecture").
-   - weak_areas: Identify exactly 3 SPECIFIC potential issues (e.g., "No GitHub or Portfolio links found", "Vague project descriptions lacking technical role details").
-   - feedback: Provide exactly 3 high-impact suggestions to improve the resume.
+   - skills: Identify ONLY hard technical skills explicitly mentioned in the resume text (languages, frameworks, databases, cloud tools, libraries). Do NOT invent skills not present.
+   - strengths: Identify exactly 3 SPECIFIC strengths based on what is actually in the resume.
+   - weak_areas: Identify exactly 3 SPECIFIC potential issues based on what is missing or weak.
+   - feedback: Provide exactly 3 high-impact, actionable suggestions.
 
 REQUIRED OUTPUT:
 Return ONLY valid JSON matching this structure:
@@ -51,100 +51,129 @@ Return ONLY valid JSON matching this structure:
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function cleanJsonString(raw: string): string {
-  // Remove markdown code blocks if present (```json ... ```)
   let clean = raw.trim();
   if (clean.includes('```')) {
     const matches = clean.match(/```(?:json)?([\s\S]*?)```/);
-    if (matches && matches[1]) {
-      clean = matches[1].trim();
-    }
+    if (matches && matches[1]) clean = matches[1].trim();
   }
+  const jsonStart = clean.indexOf('{');
+  const jsonEnd = clean.lastIndexOf('}');
+  if (jsonStart !== -1 && jsonEnd !== -1) clean = clean.slice(jsonStart, jsonEnd + 1);
   return clean;
+}
+
+function parseAIResponse(rawText: string): AIResumeAnalysis {
+  const cleanJson = cleanJsonString(rawText);
+  const parsed = JSON.parse(cleanJson);
+
+  const clamp = (n: unknown) => Math.min(100, Math.max(0, Math.round(Number(n) || 0)));
+  const strArray = (arr: unknown) =>
+    Array.isArray(arr) ? arr.filter((s): s is string => typeof s === 'string' && s.length > 2) : [];
+
+  return {
+    overall_score:        clamp(parsed.overall_score),
+    contact_info_score:   clamp(parsed.contact_info_score),
+    experience_score:     clamp(parsed.experience_score),
+    keyword_score:        clamp(parsed.keyword_score),
+    skill_coverage_score: clamp(parsed.skill_coverage_score),
+    skills:               strArray(parsed.skills),
+    strengths:            strArray(parsed.strengths),
+    weak_areas:           strArray(parsed.weak_areas),
+    feedback: {
+      critical_issue: parsed.feedback?.critical_issue || null,
+      suggestions:    strArray(parsed.feedback?.suggestions),
+    },
+  };
 }
 
 // ─── Main Function ────────────────────────────────────────────────────────────
 export async function analyzeResumeWithAI(text: string): Promise<AIResumeAnalysis> {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) {
-    console.error("❌ [Gemini] VITE_GEMINI_API_KEY is missing from .env");
-    throw new Error("Missing Gemini API Key. Please add VITE_GEMINI_API_KEY to your .env file.");
+  const groqKey = import.meta.env.VITE_GROQ_API_KEY;
+  const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+  if (!groqKey && !geminiKey) {
+    throw new Error('Missing AI API Key. Please add VITE_GROQ_API_KEY or VITE_GEMINI_API_KEY to your .env file.');
   }
 
-  const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
-  const trimmedText = text.slice(0, 10000);
-  let lastError: string = "Unknown error";
+  // Trim to 8000 chars — enough for a full resume, keeps token count low
+  const trimmedText = text.slice(0, 8000);
+  let lastError = 'Unknown error';
 
-  console.log("🤖 [Gemini] Starting Stable v1 REST Analysis... Length:", trimmedText.length);
-
-  for (const modelName of modelsToTry) {
+  // --- 1. TRY GROQ FIRST (FAST & GENEROUS FREE TIER) ---
+  if (groqKey) {
     try {
-      console.log(`🤖 [Gemini] Attempting ${modelName} via v1 REST API...`);
-      
-      const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
-      
-      const payload = {
-        contents: [{
-          parts: [{
-            text: `${SYSTEM_PROMPT}\n\nAnalyze this resume text and return JSON:\n\n${trimmedText}`
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.2
-          // Removed responseMimeType to fix 400 error in v1 API
-        }
-      };
-
-      const response = await fetch(url, {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        headers: {
+          'Authorization': `Bearer ${groqKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: `Analyze this resume text and return JSON:\n\n${trimmedText}` }
+          ],
+          temperature: 0,
+          response_format: { type: "json_object" }
+        })
       });
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        const status = response.status;
-        const msg = errData.error?.message || response.statusText;
-        console.warn(`⚠️ [Gemini] ${modelName} HTTP ${status}: ${msg}`);
-        
-        if (status === 404 || status === 400) continue; // Try next model
-        throw new Error(`Gemini API Error: ${msg}`);
+        throw new Error(`Groq API Error: ${errData.error?.message || response.statusText}`);
       }
 
       const data = await response.json();
-      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-      
-      console.log(`🤖 [DEBUG] Raw text from ${modelName}:`, rawText.slice(0, 100) + "...");
+      const rawText = data.choices?.[0]?.message?.content || '{}';
+      return parseAIResponse(rawText);
 
-      const cleanJson = cleanJsonString(rawText);
-      const parsed = JSON.parse(cleanJson);
-
-      const clamp = (n: any) => Math.min(100, Math.max(0, Math.round(Number(n) || 0)));
-      const strArray = (arr: any) => 
-        Array.isArray(arr) ? arr.filter(s => typeof s === 'string' && s.length > 2) : [];
-
-      const analysis: AIResumeAnalysis = {
-        overall_score:        clamp(parsed.overall_score),
-        contact_info_score:   clamp(parsed.contact_info_score),
-        experience_score:     clamp(parsed.experience_score),
-        keyword_score:        clamp(parsed.keyword_score),
-        skill_coverage_score: clamp(parsed.skill_coverage_score),
-        skills:               strArray(parsed.skills),
-        strengths:            strArray(parsed.strengths),
-        weak_areas:           strArray(parsed.weak_areas),
-        feedback: {
-          critical_issue: parsed.feedback?.critical_issue || null,
-          suggestions:    strArray(parsed.feedback?.suggestions),
-        },
-      };
-
-      console.log(`✅ [Gemini] SUCCESS with ${modelName}. Score:`, analysis.overall_score);
-      return analysis;
-
-    } catch (err: any) {
-      lastError = err.message;
-      console.warn(`⚠️ [Gemini] Error with ${modelName}:`, err.message);
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err.message : String(err);
+      console.warn('Groq failed, attempting Gemini fallback...', lastError);
     }
   }
 
-  throw new Error(`AI Analysis failed on all stable models. Last error: ${lastError}`);
+  // --- 2. TRY GEMINI FALLBACK MODELS ---
+  if (geminiKey) {
+    const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+    
+    for (const modelName of modelsToTry) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`;
+        const payload = {
+          contents: [{ parts: [{ text: `${SYSTEM_PROMPT}\n\nAnalyze this resume text and return JSON:\n\n${trimmedText}` }] }],
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 1024,
+          },
+        };
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          const msg = errData.error?.message || response.statusText;
+          if (response.status === 404 || response.status === 400 || response.status === 429) {
+            lastError = `Gemini API Error: ${msg}`;
+            continue; // try next gemini model
+          }
+          throw new Error(`Gemini API Error: ${msg}`);
+        }
+
+        const data = await response.json();
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+        return parseAIResponse(rawText);
+
+      } catch (err: unknown) {
+        lastError = err instanceof Error ? err.message : String(err);
+      }
+    }
+  }
+
+  throw new Error(`AI Analysis failed on all configured providers. Last error: ${lastError}`);
 }

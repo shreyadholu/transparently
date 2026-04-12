@@ -111,11 +111,10 @@ const Auth = () => {
               <button
                 key={r}
                 onClick={() => setRole(r)}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-300 relative z-10 ${
-                  role === r
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-300 relative z-10 ${role === r
                     ? 'text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground'
-                }`}
+                  }`}
               >
                 {r === 'student' ? <User className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
                 {r === 'student' ? 'Student' : 'Recruiter'}

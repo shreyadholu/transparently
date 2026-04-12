@@ -94,7 +94,6 @@ class GrowthRoadmap(BaseModel):
 
 @app.post("/analyze", response_model=AIResumeAnalysis)
 async def analyze_resume(file: UploadFile = File(...)):
-    # ... (existing analyze_resume logic) ...
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
@@ -108,26 +107,39 @@ async def analyze_resume(file: UploadFile = File(...)):
     if not api_key:
         raise HTTPException(status_code=500, detail="Gemini API Key missing in environment.")
 
-    try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        
-        prompt = f"Analyze this resume and return ONLY valid JSON matching the schema.\n\nResume Text:\n\n{text[:6000]}"
-        
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0,
-                response_mime_type="application/json",
-            ),
-            system_instruction=SYSTEM_PROMPT
-        )
-        
-        parsed = json.loads(response.text)
-        return parsed
-    except Exception as e:
-        logger.error(f"Gemini analysis failed: {e}")
-        raise HTTPException(status_code=500, detail=f"AI Analysis failed: {str(e)}")
+    genai.configure(api_key=api_key)
+    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.0-pro"]
+    prompt = f"Analyze this resume and return ONLY valid JSON matching the schema.\n\nResume Text:\n\n{text[:6000]}"
+    last_error = "Unknown error"
+
+    for model_name in models_to_try:
+        try:
+            logger.info(f"Trying model: {model_name}")
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0,
+                    response_mime_type="application/json",
+                ),
+                system_instruction=SYSTEM_PROMPT
+            )
+            raw = response.text.strip()
+            # Strip markdown code blocks if present
+            if raw.startswith("```"):
+                import re
+                match = re.search(r'```(?:json)?([\s\S]*?)```', raw)
+                if match:
+                    raw = match.group(1).strip()
+            parsed = json.loads(raw)
+            logger.info(f"Success with model: {model_name}")
+            return parsed
+        except Exception as e:
+            last_error = str(e)
+            logger.warning(f"Model {model_name} failed: {e}")
+            continue
+
+    raise HTTPException(status_code=500, detail=f"AI Analysis failed on all models. Last error: {last_error}")
 
 @app.post("/roadmap", response_model=GrowthRoadmap)
 async def generate_roadmap(req: RoadmapRequest):

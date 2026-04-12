@@ -218,21 +218,20 @@ export function extractActualSkills(text: string): string[] {
     }
   }
 
-  // Also check for synonyms in text (if the canonical skill isn't present)
+  // Also check for synonyms in text
+  // Skip aliases <= 3 chars (js, ts, pm, py, rn, pg, ml, go…) — too ambiguous in prose
   for (const [alias, canonical] of Object.entries(SKILL_SYNONYM_MAPPING)) {
-    // Skip if we already found the canonical form
-    if (foundSkills.has(canonical)) continue;
-    
+    if (alias.length <= 3) continue; // skip short/ambiguous aliases
+    if (foundSkills.has(canonical)) continue; // already found
+
     const escapedAlias = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const aliasRegex = new RegExp(`\\b${escapedAlias}\\b`, 'gi');
-    
+
     if (aliasRegex.test(lowerText)) {
-      // Normalize to canonical form
       foundSkills.add(canonical);
     }
   }
 
-  // Return as array, sorted alphabetically, with duplicates removed
   return Array.from(foundSkills).sort();
 }
 

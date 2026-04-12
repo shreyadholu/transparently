@@ -126,8 +126,8 @@ interface AppState {
 
 const AppContext = createContext<AppState | null>(null);
 
-// ─── Helper: compute ATS feedback (now powered by Python Backend) ────────────
-async function generateAIFeedback(studentSkills: string[], job: Job): Promise<FeedbackData> {
+// ─── Helper: compute ATS feedback (fast — no blocking AI calls) ──────────────
+function generateAIFeedback(studentSkills: string[], job: Job): FeedbackData {
   const matchedSkills = studentSkills.filter(s => job.skills.some(js => js.toLowerCase() === s.toLowerCase()));
   const skillGaps = job.skills.filter(js => !studentSkills.some(s => s.toLowerCase() === js.toLowerCase()));
   const keywordScore = Math.round((matchedSkills.length / Math.max(job.skills.length, 1)) * 100);
@@ -140,25 +140,7 @@ async function generateAIFeedback(studentSkills: string[], job: Job): Promise<Fe
     'Build a portfolio project showcasing your skills',
   ].slice(0, 4);
 
-  let growthRoadmap: GrowthRoadmap | undefined;
-  try {
-    const response = await fetch('http://localhost:8000/roadmap', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        student_skills: studentSkills,
-        job_title: job.title,
-        job_skills: job.skills
-      })
-    });
-    if (response.ok) {
-      growthRoadmap = await response.json();
-    }
-  } catch (err) {
-    console.error('Roadmap generation failed:', err);
-  }
-
-  return { skillGaps, formatScore, keywordScore, overallScore, suggestions, growthRoadmap };
+  return { skillGaps, formatScore, keywordScore, overallScore, suggestions };
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
@@ -166,10 +148,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
     try {
       const stored = localStorage.getItem('transparently_user');
-      console.log('📦 Initial user from localStorage:', stored ? 'Found' : 'None');
       return stored ? JSON.parse(stored) : null;
     } catch (e) {
-      console.error('Error reading localStorage:', e);
       return null;
     }
   });
@@ -206,39 +186,61 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const hydrateFromDatabase = async () => {
       setIsSyncing(true);
       try {
-        console.log('🔄 Hydrating state from Supabase for user:', user.id);
 
-        // 1. Fetch student profile
-        const { data: profile, error: profileErr } = await supabase
-          .from('student_profiles')
-          .select('resume_url, resume_score, contact_score, experience_score, keyword_score, skill_coverage_score, strengths, weak_areas, improvement_tips, critical_issue, degree, university, resume_text, skills')
-          .eq('user_id', user.id)
-          .single();
+        // Run profile fetch + jobs + applications in parallel for speed
+        const [profileResult] = await Promise.all([
+          supabase
+            .from('student_profiles')
+            .select('resume_url, resume_score, contact_score, experience_score, keyword_score, skill_coverage_score, strengths, weak_areas, improvement_tips, critical_issue, degree, university, resume_text, skills')
+            .eq('user_id', user.id)
+            .single(),
+          syncJobsFromSupabase(),
+          syncApplicationsFromSupabase(),
+        ]);
 
         if (cancelled) return;
+
+        const { data: profile, error: profileErr } = profileResult;
 
         if (profileErr && profileErr.code !== 'PGRST116') {
           console.error('Profile fetch error:', profileErr.message);
         }
 
         if (profile && profile.resume_url) {
-          console.log('📄 Profile found, resume score:', profile.resume_score);
+          // Fetch skills from profile column
+          let skillNames: string[] = Array.isArray(profile.skills) ? profile.skills : [];
 
-          // 2. Fetch skills directly from profile column (new strategy)
-          let skillNames = profile.skills || [];
-          console.log('📊 Skills from profile column:', skillNames.length);
-
-          // Fallback: if skills are missing but profile exists, re-extract from resume_text
+          // Fallback: recover from resume_text if skills missing
           if (skillNames.length === 0 && profile.resume_text) {
-            console.warn('⚠️ No skills in profile column — attempting recovery from cached resume_text');
             const recovered = extractActualSkills(profile.resume_text);
-            if (recovered.length > 0) {
-              console.log('🔄 Recovered', recovered.length, 'skills from resume_text');
-              skillNames = recovered;
-            }
+            if (recovered.length > 0) skillNames = recovered;
           }
 
-          // 3. Set all state atomically
+          // Reconstruct aiAnalysis from persisted profile data
+          // This ensures strengths/weak_areas/tips render correctly after re-login
+          const strengths: string[] = Array.isArray(profile.strengths) ? profile.strengths : [];
+          const weakAreas: string[] = Array.isArray(profile.weak_areas) ? profile.weak_areas : [];
+          const tips: string[] = Array.isArray(profile.improvement_tips) ? profile.improvement_tips : [];
+
+          if (strengths.length > 0 || weakAreas.length > 0) {
+            const reconstructed: AIResumeAnalysis = {
+              overall_score: profile.resume_score || 0,
+              contact_info_score: profile.contact_score || 0,
+              experience_score: profile.experience_score || 0,
+              keyword_score: profile.keyword_score || 0,
+              skill_coverage_score: profile.skill_coverage_score || 0,
+              skills: skillNames,
+              strengths,
+              weak_areas: weakAreas,
+              feedback: {
+                critical_issue: profile.critical_issue || null,
+                suggestions: tips,
+              },
+            };
+            setAiAnalysis(reconstructed);
+          }
+
+          // Set all state atomically
           setHasProfile(true);
           setResumeProfile(profile as ResumeProfileData);
           setResumeUrl(profile.resume_url);
@@ -246,7 +248,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
           setUser(prev => {
             if (!prev) return null;
-            console.log('🔄 Final State Update: Setting user.skills to:', skillNames.length, 'items');
             return {
               ...prev,
               resumeUploaded: true,
@@ -255,17 +256,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             };
           });
 
-          console.log('✅ Hydration complete for user:', user.name);
         } else {
           setHasProfile(false);
           setDetectedSkills([]);
-          console.log('ℹ️ No profile found for user:', user.name);
         }
-
-        // 4. Sync applications
-        await syncApplicationsFromSupabase();
-        // 5. Sync jobs
-        await syncJobsFromSupabase();
 
       } catch (err) {
         console.error('Error in hydrateFromDatabase:', err);
@@ -281,8 +275,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ─── Auth ────────────────────────────────────────────────────────────────
   const login = (name: string, email: string, role: Role, id?: string) => {
-    console.log('🔑 Login attempt for:', name, 'ID:', id);
-    // Set syncing BEFORE setting user to prevent flash
     setIsSyncing(true);
     // Initially set skills to empty, but hydration will fill them
     setUser({ id, name, email, role, skills: [], resumeScore: 0, resumeUploaded: false });
@@ -315,7 +307,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const job = jobs.find(j => j.id === jobId);
     if (!job) return;
 
-    const feedback = await generateAIFeedback(user.skills, job);
+    const feedback = generateAIFeedback(user.skills, job);
 
     // Persist to Supabase with new 'applied' status
     const { data, error } = await supabase.from('applications').insert([{
@@ -400,8 +392,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .update({ skills })
           .eq('user_id', user.id!);
 
-        if (error) console.error('❌ Failed to update skills in profile:', error.message);
-        else console.log('✅ Skills updated in student_profiles');
+        if (error) console.error('Failed to update skills in profile:', error.message);
       })();
     }
   };
@@ -447,33 +438,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
         try { resumeText = await file.text(); } catch (_) { /* fallback failed */ }
       }
 
-      if (resumeText.length < 50) {
-        console.warn('⚠️ Very short extracted text — may be image-based PDF');
-      } else {
-        console.log('🤖 [DEBUG] Extracted Text Snippet:', resumeText.slice(0, 500) + '...');
-      }
-
       // Authenticity check
       const auth = checkResumeAuthenticity(resumeText);
       if (!auth.isValid && resumeText.length > 200) {
         return { success: false, error: "This doesn't look like a resume. Please upload a PDF with Education, Experience, Skills, or Projects sections." };
       }
 
-      // STEP 4: AI Analysis (Primary: Gemini TS SDK, Fallback: Regex)
+      // STEP 4: AI Analysis via Gemini, fallback to basic regex analysis
       let geminiResult: AIResumeAnalysis | null = null;
       let regexResult: ResumeAnalysisResult | null = null;
 
       try {
-        console.log('🤖 [Gemini] Calling TypeScript AI analyzer...');
         geminiResult = await analyzeResumeWithAI(resumeText);
         setAiAnalysis(geminiResult);
       } catch (geminiErr) {
-        console.warn('⚠️ TypeScript Gemini failed, falling back to regex:', geminiErr);
+        console.error('Gemini analysis failed, using local basic analysis as fallback:', geminiErr);
         try {
           regexResult = await analyzeResumeStrict(file);
           setResumeAnalysisResult(regexResult);
         } catch (regexErr) {
-          console.error('❌ Regex also failed:', regexErr);
+          console.error('Regex analysis fallback also failed:', regexErr);
         }
       }
 
@@ -491,14 +475,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return true;
       });
 
-      console.log('📋 Extracted skills (deduped):', extractedSkills.length, extractedSkills);
+      // Prepare fallback arrays if Gemini failed
+      const strengthsFallback = regexResult?.structural_integrity.overall_integrity_average && regexResult.structural_integrity.overall_integrity_average > 70 
+        ? ['Good basic resume structure detected'] 
+        : [];
+      
+      const weakAreasFallback = regexResult?.feedback.critical_issue 
+        ? [regexResult.feedback.critical_issue] 
+        : [];
+
+      const tipsFallback = regexResult?.feedback.suggestion 
+        ? [regexResult.feedback.suggestion] 
+        : [];
+
+      const finalOverallScore = geminiResult?.overall_score ?? regexResult?.resume_health.overall_score ?? 0;
+      const finalContactScore = geminiResult?.contact_info_score ?? regexResult?.structural_integrity.contact_info_score ?? 0;
+      const finalExpScore = geminiResult?.experience_score ?? regexResult?.structural_integrity.experience_headers_score ?? 0;
+      const finalKeywordScore = geminiResult?.keyword_score ?? regexResult?.structural_integrity.keyword_density_score ?? 0;
 
       // Update UI state
       setDetectedSkills(extractedSkills);
       setUser(prev => prev ? {
         ...prev,
         resumeUploaded: true,
-        resumeScore: geminiResult?.overall_score ?? regexResult?.resume_health.overall_score ?? 0,
+        resumeScore: finalOverallScore,
         skills: extractedSkills,
       } : null);
 
@@ -507,15 +507,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         user_id: userId,
         resume_url: publicUrl,
         resume_text: resumeText.slice(0, 10000),
-        resume_score: geminiResult?.overall_score ?? regexResult?.resume_health.overall_score ?? 0,
-        contact_score: geminiResult?.contact_info_score ?? regexResult?.structural_integrity.contact_info_score ?? 0,
-        experience_score: geminiResult?.experience_score ?? regexResult?.structural_integrity.experience_headers_score ?? 0,
-        keyword_score: geminiResult?.keyword_score ?? regexResult?.structural_integrity.keyword_density_score ?? 0,
+        resume_score: finalOverallScore,
+        contact_score: finalContactScore,
+        experience_score: finalExpScore,
+        keyword_score: finalKeywordScore,
         skill_coverage_score: geminiResult?.skill_coverage_score ?? 0,
-        strengths: geminiResult?.strengths ?? [],
-        weak_areas: geminiResult?.weak_areas ?? [],
-        improvement_tips: geminiResult?.feedback.suggestions ?? [],
-        critical_issue: geminiResult?.feedback.critical_issue ?? null,
+        strengths: geminiResult?.strengths ?? strengthsFallback,
+        weak_areas: geminiResult?.weak_areas ?? weakAreasFallback,
+        improvement_tips: geminiResult?.feedback.suggestions ?? tipsFallback,
+        critical_issue: geminiResult?.feedback.critical_issue ?? regexResult?.feedback.critical_issue ?? null,
         degree: null,
         university: null,
         skills: extractedSkills,
@@ -527,16 +527,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .select();
 
       if (dbError) {
-        console.error('❌ Profile save error:', dbError);
+        console.error('Profile save error:', dbError.message);
       } else {
         setHasProfile(true);
         setResumeProfile({ ...profilePayload, skills: extractedSkills } as ResumeProfileData);
-        console.log('✅ Profile & Skills saved to student_profiles successfully');
       }
 
       return { success: true };
     } catch (error) {
-      console.error('❌ Unexpected error in handleFileUpload:', error);
+      console.error('Unexpected error in handleFileUpload:', error);
       return { success: false, error: 'Failed to process resume. Please try again.' };
     } finally {
       setIsAnalyzing(false);
