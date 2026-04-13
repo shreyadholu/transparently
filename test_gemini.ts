@@ -19,7 +19,11 @@ async function listModels() {
     const result = await model.generateContent("test");
     console.log("gemini-1.5-flash worked!");
   } catch (err) {
-    console.error("gemini-1.5-flash failed:", err.message);
+    if (err instanceof Error) {
+      console.error("gemini-1.5-flash failed:", err.message);
+    } else {
+      console.error("gemini-1.5-flash failed:", err);
+    }
   }
 }
 

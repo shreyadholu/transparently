@@ -8,17 +8,17 @@ async function listModels() {
     console.error("No API key found in .env");
     return;
   }
-  
+
   const url = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
-  
+
   try {
     const response = await fetch(url);
     const data = await response.json();
     console.log("--- AVAILABLE MODELS ---");
     if (data.models) {
-      data.models.forEach(m => {
+      data.models.forEach((m: any) => {
         if (m.supportedGenerationMethods.includes("generateContent")) {
-            console.log(`- ${m.name} (${m.displayName})`);
+          console.log(`- ${m.name} (${m.displayName})`);
         }
       });
     } else {
