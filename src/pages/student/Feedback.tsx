@@ -82,10 +82,10 @@ const Feedback = () => {
           <Skeleton className="h-4 w-64" />
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-           <Skeleton className="h-20 w-full rounded-2xl" />
-           <Skeleton className="h-20 w-full rounded-2xl" />
-           <Skeleton className="h-20 w-full rounded-2xl" />
-           <Skeleton className="h-20 w-full rounded-2xl" />
+          <Skeleton className="h-20 w-full rounded-2xl" />
+          <Skeleton className="h-20 w-full rounded-2xl" />
+          <Skeleton className="h-20 w-full rounded-2xl" />
+          <Skeleton className="h-20 w-full rounded-2xl" />
         </div>
         <ListSkeleton rows={5} />
       </div>
@@ -103,7 +103,7 @@ const Feedback = () => {
         </div>
         <div className="bg-card border border-border shadow-sm rounded-2xl p-12 md:p-16 flex flex-col items-center justify-center text-center">
           <div className="w-20 h-20 rounded-full bg-muted/30 flex items-center justify-center mb-5 border border-dashed border-border">
-             <FileText className="w-8 h-8 text-muted-foreground/50" />
+            <FileText className="w-8 h-8 text-muted-foreground/50" />
           </div>
           <p className="text-xl font-bold text-foreground mb-1">No applications yet</p>
           <p className="text-muted-foreground text-sm max-w-[320px]">Apply to jobs to see your activity, track your pipeline, and receive feedback.</p>
@@ -127,7 +127,7 @@ const Feedback = () => {
       {/* Summary stats */}
       <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {[
-          { label: 'Total Apps', value: totalCount, color: 'text-foreground', bg: 'bg-card border-border' },
+          { label: 'Total Applications', value: totalCount, color: 'text-foreground', bg: 'bg-card border-border' },
           { label: 'In Pipeline', value: activeCount, color: 'text-blue-500', bg: 'bg-card border-blue-500/20' },
           { label: 'Selected', value: selectedCount, color: 'text-emerald-500', bg: 'bg-card border-emerald-500/20' },
           { label: 'Rejected', value: rejectedCount, color: 'text-red-500', bg: 'bg-card border-red-500/20' },
@@ -142,10 +142,10 @@ const Feedback = () => {
       {/* Application List */}
       <motion.div variants={container} initial="hidden" animate="show" className="space-y-3">
         <div className="flex items-center justify-between px-1 mb-1 relative">
-           <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Application History</h2>
-           <span className="text-xs font-bold text-muted-foreground bg-muted px-2.5 py-0.5 rounded-full">{myApps.length}</span>
+          <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Application History</h2>
+          <span className="text-xs font-bold text-muted-foreground bg-muted px-2.5 py-0.5 rounded-full">{myApps.length}</span>
         </div>
-        
+
         {myApps.map((app) => {
           const job = jobs.find(j => j.id === app.jobId);
           const fb = app.feedback;
@@ -160,7 +160,7 @@ const Feedback = () => {
                 className="w-full flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-4 transition-colors text-left focus:outline-none"
               >
                 <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0 hidden sm:flex">
-                     <Briefcase className="w-5 h-5 text-primary" />
+                  <Briefcase className="w-5 h-5 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0 pr-2">
                   <h3 className="font-semibold text-base text-foreground truncate mb-0.5">{job.title}</h3>
@@ -168,8 +168,8 @@ const Feedback = () => {
                     <span className="font-medium text-foreground/80">{job.company}</span>
                     <span className="hidden sm:inline w-1 h-1 rounded-full bg-border" />
                     <span className="flex items-center gap-1 whitespace-nowrap">
-                       <Calendar className="w-3.5 h-3.5" />
-                       {new Date(app.appliedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      <Calendar className="w-3.5 h-3.5" />
+                      {new Date(app.appliedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </span>
                   </div>
                 </div>
@@ -207,14 +207,14 @@ const Feedback = () => {
                           <div className="flex items-center gap-2 text-[11px] font-black text-destructive uppercase tracking-widest px-1">
                             <AlertTriangle className="w-4 h-4" /> Application Status: Declined
                           </div>
-                          
+
                           <div className="grid grid-cols-1 gap-4">
                             {fb.rejectionReasons.map((r, i) => {
                               const enriched = REJECTION_ENRICHMENT[r];
                               return (
                                 <div key={i} className="p-5 md:p-6 rounded-2xl bg-destructive/[0.03] border border-destructive/10 shadow-sm relative overflow-hidden group">
                                   <div className="absolute top-0 right-0 w-32 h-32 bg-destructive/5 rounded-full -translate-y-16 translate-x-16 blur-3xl group-hover:bg-destructive/10 transition-all" />
-                                  
+
                                   <div className="flex items-center gap-3 mb-4 relative z-10">
                                     <div className="p-2.5 rounded-xl bg-destructive/10 text-destructive border border-destructive/20 shadow-sm">
                                       <XCircle className="w-5 h-5" />
@@ -229,7 +229,7 @@ const Feedback = () => {
                                         "{enriched?.detail || "After a thorough review, our team decided to move forward with other candidates who more closely align with our current organizational requirements for this role."}"
                                       </p>
                                     </div>
-                                    
+
                                     {enriched?.tip && (
                                       <div className="space-y-2 p-4 rounded-xl bg-white/60 border border-emerald-500/10 shadow-sm">
                                         <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 flex items-center gap-1.5">
@@ -273,11 +273,10 @@ const Feedback = () => {
                                     <div className="space-y-1">
                                       <div className="flex items-center gap-2">
                                         <h5 className="text-sm font-bold text-foreground">{step.title}</h5>
-                                        <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md border ${
-                                          step.difficulty === 'Beginner' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                        <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md border ${step.difficulty === 'Beginner' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
                                           step.difficulty === 'Intermediate' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                                          'bg-rose-50 text-rose-600 border-rose-100'
-                                        }`}>
+                                            'bg-rose-50 text-rose-600 border-rose-100'
+                                          }`}>
                                           {step.difficulty}
                                         </span>
                                       </div>
@@ -301,7 +300,7 @@ const Feedback = () => {
                                       {fb.growthRoadmap.project_idea.split(':')[0]}
                                     </h5>
                                     <p className="text-sm text-muted-foreground/90 leading-relaxed font-medium">
-                                      {fb.growthRoadmap.project_idea.includes(':') 
+                                      {fb.growthRoadmap.project_idea.includes(':')
                                         ? fb.growthRoadmap.project_idea.split(':')[1].trim()
                                         : fb.growthRoadmap.project_idea}
                                     </p>
@@ -327,7 +326,7 @@ const Feedback = () => {
                             Direct Insights
                           </span>
                         </div>
-                        
+
                         {loadingNotes[app.id] ? (
                           <div className="flex items-center gap-2 text-xs text-muted-foreground py-4">
                             <Loader2 className="w-4 h-4 animate-spin" /> Loading feedback...

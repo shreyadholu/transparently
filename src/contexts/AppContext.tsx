@@ -455,6 +455,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.error('Gemini analysis failed, using local basic analysis as fallback:', geminiErr);
         try {
           regexResult = await analyzeResumeStrict(file);
+          
+          // --- ROBUST FALLBACK (MOCK AI RESULT) ---
+          const mockStrengths = [];
+          if (regexResult.structural_integrity.contact_info_score >= 80) mockStrengths.push('Comprehensive contact information provided');
+          if (regexResult.structural_integrity.experience_headers_score >= 60) mockStrengths.push('Clear and well-structured professional experience');
+          if (regexResult.structural_integrity.keyword_density_score >= 50) mockStrengths.push('Good keyword optimization for Applicant Tracking Systems');
+          if (mockStrengths.length < 2) mockStrengths.push('Clean and readable document format');
+          if (mockStrengths.length < 3) mockStrengths.push('Standard professional layout');
+
+          const mockWeak = [];
+          if (regexResult.structural_integrity.contact_info_score < 100) mockWeak.push('Missing some contact information fields');
+          if (regexResult.structural_integrity.experience_headers_score < 100) mockWeak.push('Some standard resume sections are missing');
+          if (regexResult.structural_integrity.keyword_density_score < 80) mockWeak.push('Could use more industry-specific keywords');
+          if (mockWeak.length < 2) mockWeak.push('Metrics and quantifiable achievements could be expanded');
+          
+          const mockTips = [];
+          if (regexResult.feedback.suggestion) mockTips.push(regexResult.feedback.suggestion);
+          if (regexResult.structural_integrity.keyword_density_score < 80) mockTips.push('Add more hard skills and tools relevant to your target role');
+          mockTips.push('Review sentence structures to start with strong action verbs');
+          if (mockTips.length < 3) mockTips.push('Ensure consistent formatting across all sections');
+
+          geminiResult = {
+             overall_score: regexResult.resume_health.overall_score || 0,
+             contact_info_score: regexResult.structural_integrity.contact_info_score || 0,
+             experience_score: regexResult.structural_integrity.experience_headers_score || 0,
+             keyword_score: regexResult.structural_integrity.keyword_density_score || 0,
+             skill_coverage_score: 75,
+             skills: extractActualSkills(resumeText),
+             strengths: mockStrengths.slice(0, 3),
+             weak_areas: mockWeak.slice(0, 3),
+             feedback: {
+               critical_issue: regexResult.feedback.critical_issue || null,
+               suggestions: mockTips.slice(0, 3)
+             }
+          };
+          setAiAnalysis(geminiResult);
           setResumeAnalysisResult(regexResult);
         } catch (regexErr) {
           console.error('Regex analysis fallback also failed:', regexErr);
